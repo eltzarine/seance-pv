@@ -1,0 +1,956 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>Séance PV</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,400;7..72,600&family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: one column, a step rail on top (Séance → Enregistrement → Procès-verbal); step 3 switches between drafting and an A4 preview of the PDF. */
+:root{
+  --paper:#f6f7f9; --sheet:#ffffff; --ink:#16233b; --muted:#5b6578; --line:#dfe3ea;
+  --accent:#1f3f8f; --accent-soft:#e8edf9; --rec:#c2331f; --rec-soft:#fbe9e6;
+  --ok:#1d7a4c; --ok-soft:#e3f3ea; --warn:#9a6200; --warn-soft:#fbf1dc; --desk:#e4e7ed;
+  --f-doc:"Literata",Georgia,"Times New Roman",serif;
+  --f-ui:"Public Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#0f141d; --sheet:#171e2b; --ink:#e6e9f0; --muted:#9aa4b6; --line:#2a3345;
+  --accent:#8fa9ec; --accent-soft:#1f2a45; --rec:#f07a65; --rec-soft:#3a1f1b;
+  --ok:#6cc79a; --ok-soft:#173326; --warn:#e3b45c; --warn-soft:#352a14; --desk:#0a0e15; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#0f141d; --sheet:#171e2b; --ink:#e6e9f0; --muted:#9aa4b6; --line:#2a3345;
+  --accent:#8fa9ec; --accent-soft:#1f2a45; --rec:#f07a65; --rec-soft:#3a1f1b;
+  --ok:#6cc79a; --ok-soft:#173326; --warn:#e3b45c; --warn-soft:#352a14; --desk:#0a0e15; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font:15px/1.5 var(--f-ui)}
+.wrap{max-width:860px;margin:0 auto;padding:16px 16px 64px}
+header.top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.brand{font:600 22px/1.2 var(--f-doc);letter-spacing:-.01em}
+.brand small{display:block;font:500 12px var(--f-ui);color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-top:4px}
+.btn{font:600 14px var(--f-ui);border:1px solid var(--line);background:var(--sheet);color:var(--ink);border-radius:8px;padding:9px 14px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;min-height:40px}
+.btn:hover{border-color:var(--accent)}
+.btn:focus-visible,.chip:focus-visible,.step:focus-visible,.tab:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--sheet)}
+.btn.ghost{background:transparent;border-color:transparent;color:var(--muted);padding-inline:8px}
+.btn.ok{color:var(--ok);border-color:var(--ok)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+nav.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:20px 0 18px;position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--paper);padding-block:8px}
+.step{border:0;background:transparent;text-align:left;padding:8px 6px 10px;border-bottom:3px solid var(--line);cursor:pointer;color:var(--muted);font:600 13px var(--f-ui);min-width:0}
+.step b{display:block;font:500 11px var(--f-mono);letter-spacing:.04em;margin-bottom:2px}
+.step[aria-current="true"]{color:var(--ink);border-color:var(--accent)}
+section.panel{display:grid;gap:16px}
+.card{background:var(--sheet);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
+h2{font:600 18px/1.3 var(--f-doc);margin:0;text-wrap:balance}
+h3{font:600 12px var(--f-ui);text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:0 0 10px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+label{display:grid;gap:4px;font-size:13px;color:var(--muted);font-weight:500}
+input,select,textarea{font:15px var(--f-ui);color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:9px 10px;width:100%;max-width:100%;min-width:0}
+input,select{height:44px}
+/* iOS donne aux champs date/heure une largeur native qui déborde : on la neutralise. */
+input[type="date"],input[type="time"]{-webkit-appearance:none;appearance:none;display:block;text-align:left;line-height:24px}
+input[type="date"]::-webkit-date-and-time-value,input[type="time"]::-webkit-date-and-time-value{text-align:left;margin:0}
+input[type="date"]::-webkit-calendar-picker-indicator,input[type="time"]::-webkit-calendar-picker-indicator{opacity:.6}
+.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 12px}
+.fields .full{grid-column:1/-1}
+.fields label{min-width:0}
+@media (min-width:640px){.fields{grid-template-columns:repeat(4,minmax(0,1fr))}.fields .half{grid-column:span 2}}
+textarea{resize:vertical;line-height:1.5}
+.note{font-size:13px;color:var(--muted)}
+.banner{border-radius:8px;padding:10px 12px;font-size:14px;background:var(--warn-soft);color:var(--ink);border-left:3px solid var(--warn)}
+.banner.info{background:var(--accent-soft);border-left-color:var(--accent)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.spread{display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+.elus{display:grid;gap:0;max-height:520px;overflow:auto}
+.elu{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line)}
+.elu:last-child{border-bottom:0}
+.elu .nom{min-width:0;overflow-wrap:anywhere}
+.elu .role{display:block;font-size:12px;color:var(--muted)}
+.elu select.pour{grid-column:1/-1;font-size:13px;padding:6px 8px}
+.chip{border:1px solid var(--line);background:var(--paper);color:var(--ink);border-radius:999px;padding:5px 11px;font:600 12px var(--f-ui);cursor:pointer;white-space:nowrap}
+.chip.present{background:var(--ok-soft);border-color:var(--ok);color:var(--ok)}
+.chip.absent{color:var(--muted)}
+.chip.pouvoir{background:var(--warn-soft);border-color:var(--warn);color:var(--warn)}
+.tally{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.tally strong{font:600 18px var(--f-mono);color:var(--ink);display:block}
+.quorum{font-weight:600}
+.quorum.okq{color:var(--ok)} .quorum.ko{color:var(--rec)}
+ol.odj{margin:0;padding-left:22px;display:grid;gap:6px}
+ol.odj li{padding-left:4px}
+.odj-row{display:flex;gap:6px}
+.odj-row{align-items:flex-start}
+.odj-row textarea.grow{flex:1;resize:none;overflow:hidden;min-height:64px;line-height:1.45;padding:10px 12px}
+ol.odj li::marker{font:600 14px var(--f-mono);color:var(--muted)}
+ol.odj{gap:10px}
+.recbar{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center}
+.recbtn{width:64px;height:64px;border-radius:50%;border:2px solid var(--rec);background:var(--sheet);cursor:pointer;display:grid;place-items:center}
+.recbtn span{width:24px;height:24px;border-radius:50%;background:var(--rec);transition:border-radius .2s}
+.recbtn.on{background:var(--rec-soft)}
+.recbtn.on span{border-radius:4px;width:20px;height:20px}
+.clock{font:500 28px var(--f-mono);font-variant-numeric:tabular-nums}
+.live{display:inline-flex;align-items:center;gap:6px;font:600 12px var(--f-ui);color:var(--rec);text-transform:uppercase;letter-spacing:.06em}
+.live i{width:8px;height:8px;border-radius:50%;background:var(--rec);animation:pulse 1.2s infinite}
+@keyframes pulse{50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.live i{animation:none}}
+.speakers{display:flex;gap:6px;flex-wrap:wrap;max-height:220px;overflow:auto}
+.speakers .chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--sheet)}
+.interim{min-height:1.5em;font-style:italic;color:var(--muted)}
+.segs{display:grid;max-height:440px;overflow:auto;border-top:1px solid var(--line)}
+.seg{display:grid;grid-template-columns:64px 1fr auto;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);align-items:start}
+.seg time{font:500 12px var(--f-mono);color:var(--muted);padding-top:2px}
+.seg .who{font-weight:600;font-size:13px}
+.seg .pt{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.seg p{margin:2px 0 0;overflow-wrap:anywhere}
+.x{border:0;background:none;color:var(--muted);cursor:pointer;font-size:18px;line-height:1;padding:4px 6px;border-radius:6px}
+.x:hover{color:var(--rec)}
+.progress{height:6px;background:var(--line);border-radius:99px;overflow:hidden}
+.progress span{display:block;height:100%;background:var(--ok);transition:width .3s}
+.tabs{display:inline-flex;border:1px solid var(--line);border-radius:9px;padding:3px;background:var(--paper)}
+.tab{border:0;background:transparent;color:var(--muted);font:600 13px var(--f-ui);padding:7px 14px;border-radius:7px;cursor:pointer}
+.tab[aria-selected="true"]{background:var(--sheet);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.draft{background:var(--sheet);border:1px solid var(--line);border-radius:10px;padding:8px 18px}
+.para{padding:14px 0 14px 14px;border-left:3px solid var(--line);margin:10px 0}
+.para.ok{border-left-color:var(--ok)}
+.para.edited{border-left-color:var(--accent)}
+.para h4{font:600 15px var(--f-doc);margin:0 0 6px;text-wrap:balance}
+.para .txt{white-space:pre-wrap;font:15.5px/1.65 var(--f-doc);max-width:68ch;overflow-wrap:anywhere}
+.para .todo-mark{background:var(--warn-soft);color:var(--ink);padding:0 3px;border-radius:3px}
+.para textarea{font:15px/1.6 var(--f-doc);min-height:140px}
+.para .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.pill{font:600 11px var(--f-ui);letter-spacing:.05em;text-transform:uppercase;padding:2px 8px;border-radius:99px;display:inline-block;margin-bottom:6px}
+.pill.todo{background:var(--warn-soft);color:var(--warn)}
+.pill.ok{background:var(--ok-soft);color:var(--ok)}
+.pill.edited{background:var(--accent-soft);color:var(--accent)}
+.fixed{font-size:13px;color:var(--muted);padding:12px 0 4px;border-bottom:1px dashed var(--line)}
+.desk{background:var(--desk);border-radius:10px;padding:18px 12px;display:grid;gap:16px;justify-items:center}
+.desk canvas{width:100%;max-width:640px;height:auto;aspect-ratio:210/297;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.18);border-radius:2px}
+.desk .cap{font:500 12px var(--f-mono);color:var(--muted)}
+.empty{text-align:center;padding:36px 16px;color:var(--muted)}
+.io{display:grid;gap:10px}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:8px;font-size:14px;z-index:20;max-width:calc(100% - 32px)}
+@media (max-width:480px){
+  .seg{grid-template-columns:52px 1fr auto}
+  .clock{font-size:24px}
+  .draft{padding:4px 12px}
+  .desk{padding:12px 8px}
+}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">Séance PV<small>Conseil municipal de Gaillon · Eure</small></div>
+    <div class="row">
+      <button class="btn ghost" id="btnExport" type="button">Exporter</button>
+      <button class="btn ghost" id="btnImport" type="button">Importer</button>
+      <button class="btn ghost" id="btnNew" type="button">Nouvelle séance</button>
+    </div>
+  </header>
+  <div class="card io" id="ioBox" hidden>
+    <h3 style="margin:0" id="ioTitle">Importer une séance</h3>
+    <p class="note" style="margin:0" id="ioNote"></p>
+    <textarea id="ioText" rows="6" aria-label="Données de la séance"></textarea>
+    <div class="row"><button class="btn primary" id="ioGo" type="button">Importer</button><button class="btn ghost" id="ioClose" type="button">Fermer</button></div>
+  </div>
+
+  <nav class="steps" aria-label="Étapes">
+    <button class="step" data-step="0" type="button"><b>1 · AVANT</b>Séance</button>
+    <button class="step" data-step="1" type="button"><b>2 · PENDANT</b>Enregistrement</button>
+    <button class="step" data-step="2" type="button"><b>3 · APRÈS</b>Procès-verbal</button>
+  </nav>
+
+  <div id="confirmBox" class="banner" hidden>
+    <div class="spread"><span id="confirmMsg"></span>
+      <span class="row"><button class="btn" id="confirmNo" type="button">Annuler</button><button class="btn primary" id="confirmYes" type="button">Confirmer</button></span></div>
+  </div>
+
+  <!-- 1 · Séance -->
+  <section class="panel" id="p0">
+    <div class="banner info">Composition du conseil élu en mars 2026 (29 membres), reprise d'un annuaire public : vérifiez-la avec la mairie avant la première séance.</div>
+    <div class="card">
+      <h3>Séance</h3>
+      <div class="fields">
+        <label class="full half">Commune<input id="f_commune"></label>
+        <label>Département<input id="f_dept"></label>
+        <label>Arrondissement<input id="f_arr"></label>
+        <label>Date de séance<input id="f_date" type="date"></label>
+        <label>Heure d'ouverture<input id="f_heure" type="time"></label>
+        <label>Convocation le<input id="f_convoc" type="date"></label>
+        <label>Élus en exercice<input id="f_exercice" type="number" min="1" inputmode="numeric"></label>
+        <label class="full">Lieu<input id="f_lieu"></label>
+      </div>
+    </div>
+    <div class="card">
+      <div class="spread"><h3 style="margin:0">Appel des élus</h3><div class="tally" id="tally"></div></div>
+      <p class="note">Touchez le statut pour passer de présent à absent, puis à « pouvoir ». Un élu ne peut recevoir qu'un seul pouvoir.</p>
+      <div class="elus" id="elus"></div>
+      <div class="row" style="margin-top:10px">
+        <input id="newElu" placeholder="Ajouter un élu (Prénom NOM)" style="flex:1">
+        <button class="btn" id="addElu" type="button">Ajouter</button>
+      </div>
+      <div class="grid" style="margin-top:14px">
+        <label>Président de séance<select id="f_president"></select></label>
+        <label>Secrétaire de séance<select id="f_secretaire"></select></label>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Ordre du jour</h3>
+      <ol class="odj" id="odj"></ol>
+      <div class="row" style="margin-top:10px">
+        <input id="newPoint" placeholder="Ajouter un point" style="flex:1">
+        <button class="btn" id="addPoint" type="button">Ajouter</button>
+      </div>
+    </div>
+    <div class="row"><button class="btn primary" type="button" data-go="1">Passer à l'enregistrement →</button></div>
+  </section>
+
+  <!-- 2 · Enregistrement -->
+  <section class="panel" id="p1" hidden>
+    <div class="card">
+      <div class="recbar">
+        <button class="recbtn" id="recBtn" type="button" aria-label="Démarrer l'enregistrement"><span></span></button>
+        <div style="min-width:0">
+          <div class="clock" id="clock">00:00:00</div>
+          <div id="recState" class="note"></div>
+        </div>
+        <span class="live" id="liveTag" hidden><i></i>En direct</span>
+      </div>
+      <div id="micBanner" class="banner" style="margin-top:12px" hidden></div>
+    </div>
+    <div class="card">
+      <h3>Point en cours</h3>
+      <select id="curPoint" aria-label="Point en cours"></select>
+      <h3 style="margin-top:14px">La parole est à</h3>
+      <div class="speakers" id="speakers"></div>
+      <p class="note" style="margin:8px 0 0">Le président touche le nom de l'élu qui prend la parole : chaque intervention lui est attribuée.</p>
+    </div>
+    <div class="card">
+      <div class="spread"><h3 style="margin:0">Transcription</h3><span class="note" id="segCount"></span></div>
+      <div class="interim" id="interim"></div>
+      <div class="segs" id="segs"></div>
+      <div style="display:grid;gap:8px;margin-top:12px">
+        <label for="manual">Ajouter une intervention à la main</label>
+        <textarea id="manual" rows="2" placeholder="Texte de l'intervention, attribuée à l'orateur sélectionné"></textarea>
+        <div class="row"><button class="btn" id="addSeg" type="button">Ajouter à la transcription</button></div>
+      </div>
+    </div>
+    <div class="row"><button class="btn primary" type="button" data-go="2">Passer au procès-verbal →</button></div>
+  </section>
+
+  <!-- 3 · PV -->
+  <section class="panel" id="p2" hidden>
+    <div class="card">
+      <div class="spread">
+        <div style="min-width:0"><h2 id="pvTitle">Procès-verbal</h2><div class="note" id="pvProgressTxt"></div></div>
+        <div class="row">
+          <button class="btn" id="genBtn" type="button">Rédiger avec Claude</button>
+          <button class="btn" id="stopGen" type="button" hidden>Arrêter</button>
+        </div>
+      </div>
+      <div class="progress" style="margin-top:12px"><span id="pvBar" style="width:0"></span></div>
+      <div id="genState" class="note" style="margin-top:8px"></div>
+    </div>
+
+    <div class="spread">
+      <div class="tabs" role="tablist" aria-label="Affichage du procès-verbal">
+        <button class="tab" role="tab" id="tabEdit" type="button">Rédaction</button>
+        <button class="tab" role="tab" id="tabPrev" type="button">Aperçu PDF</button>
+      </div>
+      <div class="row">
+        <button class="btn primary" id="pdfBtn" type="button">Télécharger le PDF</button>
+        <button class="btn ghost" id="copyBtn" type="button">Copier le texte</button>
+      </div>
+    </div>
+    <p class="note" id="pdfNote" style="margin:-8px 0 0"></p>
+    <textarea id="copyFallback" rows="6" hidden readonly aria-label="Texte du procès-verbal"></textarea>
+
+    <div id="viewEdit"></div>
+    <div id="viewPrev" class="desk" hidden></div>
+  </section>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+(() => {
+const KEY = "seance-pv-gaillon-v2";
+const $ = s => document.querySelector(s);
+const h = (tag, attrs = {}, ...kids) => {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
+    if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else if (k === "class") el.className = v;
+    else el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const k of kids.flat()) if (k != null) el.append(k);
+  return el;
+};
+
+/* ---------- Gaillon : conseil élu en mars 2026 ---------- */
+const ADJOINTS = ["Guy Richard MOUAKA","Karine HOUCHARD","Thierry PATEL","Jessica JEHAN","Mickael REVY","Chiraz MOALIC","Louis MENDY","Isabelle DELUCA"];
+const CONSEILLERS = ["Grégory BERNARD","Marie CHARLES","Cyril COTTE","Patricia DE CARVALHO","Stephane LHERNAULT","Najet HADDOU","Alban CASSIOPE","Darifa BAKRI","Bernard FONTAINE","Liliane COQUET","Alain LEGRAS","Camille BEURIOT","Makan SISSOKO","Edouard VARIN","Corinne COTONNEC","Denis DUBOS","Chantal GUILLEMET","Thierry FOSCOLOS","Christine QUILLET","Jérémy CORDIER"];
+const ORD = ["1er","2e","3e","4e","5e","6e","7e","8e"];
+const nextTuesday = () => { const d = new Date(); d.setDate(d.getDate() + ((9 - d.getDay()) % 7 || 7)); return d; };
+const iso = d => d.toISOString().slice(0, 10);
+const GAILLON = () => {
+  const d = nextTuesday(), c = new Date(d); c.setDate(c.getDate() - 7);
+  const S = {
+    step: 0,
+    seance: {
+      commune: "Gaillon", dept: "Eure", arr: "Les Andelys", date: iso(d), heure: "18:30", convoc: iso(c),
+      lieu: "salle du conseil municipal, hôtel de ville, 2 rue du Général-de-Gaulle", exercice: 29,
+      president: "Odile HANTZ", secretaire: "",
+      elus: [
+        { nom: "Odile HANTZ", role: "Maire" },
+        ...ADJOINTS.map((n, i) => ({ nom: n, role: ORD[i] + " adjoint(e)" })),
+        ...CONSEILLERS.map(n => ({ nom: n, role: "Conseiller(ère) municipal(e)" }))
+      ].map(e => ({ ...e, statut: "present", pour: "" })),
+      odj: [
+        "Désignation du secrétaire de séance",
+        "Approbation du procès-verbal de la séance précédente",
+        "Compte rendu des décisions prises par le maire par délégation (art. L2122-22 du CGCT)",
+        "Questions diverses"
+      ]
+    },
+    elapsed: 0, segments: [], pv: []
+  };
+  S.pv = skeleton(S);
+  return S;
+};
+
+/* ---------- utilitaires ---------- */
+const longDate = (s, wd = true) => s ? new Date(s + "T12:00").toLocaleDateString("fr-FR", { weekday: wd ? "long" : undefined, day: "numeric", month: "long", year: "numeric" }) : "[date]";
+const shortDate = s => s ? s.split("-").reverse().join("/") : "";
+const heureTxt = t => t ? t.replace(":", " h ") : "[heure]";
+const TODO = /\[À compléter[^\]]*\]/;
+
+function skeleton(st) {
+  const s = st.seance, segs = st.segments || [];
+  const sec = (titre, texte) => ({ id: "k" + Math.random().toString(36).slice(2, 8), titre, texte, status: "todo" });
+  const out = [sec("Ouverture de la séance",
+    `Le ${longDate(s.date, false)}, à ${heureTxt(s.heure)}, le conseil municipal de la commune de ${s.commune}, légalement convoqué le ${s.convoc ? longDate(s.convoc, false) : "[À compléter : date de convocation]"}, s'est réuni en séance publique, ${s.lieu}, sous la présidence de ${s.president || "[À compléter : président de séance]"}.`)];
+  s.odj.forEach((p, i) => {
+    const mine = segs.filter(x => x.pt === i);
+    const notes = mine.length ? "\n\nInterventions relevées (à reformuler) :\n" + mine.map(x => `– ${x.who || "Orateur"} : ${x.text}`).join("\n") : "";
+    const isQD = /questions diverses/i.test(p), isSec = /secrétaire de séance/i.test(p);
+    const body = isSec ? `${s.secretaire || "[À compléter : nom]"} est désigné(e) secrétaire de séance.`
+      : isQD ? "[À compléter : questions posées et réponses apportées, ou « Aucune question diverse n'est soulevée. »]"
+      : "[À compléter : exposé du rapporteur et débats]\n\nVote : [À compléter : résultat du vote]";
+    out.push(sec(`Point ${i + 1} – ${p}`, body + notes));
+  });
+  out.push(sec("Clôture", "L'ordre du jour étant épuisé, la séance est levée à [À compléter : heure de levée]."));
+  return out;
+}
+
+let S;
+try { S = JSON.parse(localStorage.getItem(KEY)) || GAILLON(); } catch { S = GAILLON(); }
+let saveT;
+const save = () => { clearTimeout(saveT); saveT = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch {} }, 250); if (view === "prev") schedulePreview(); };
+
+const toast = msg => { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => t.hidden = true, 2800); };
+let confirmFn = null;
+const ask = (msg, fn) => { $("#confirmMsg").textContent = msg; confirmFn = fn; $("#confirmBox").hidden = false; $("#confirmBox").scrollIntoView({ block: "nearest" }); };
+$("#confirmNo").onclick = () => { $("#confirmBox").hidden = true; confirmFn = null; };
+$("#confirmYes").onclick = () => { $("#confirmBox").hidden = true; const f = confirmFn; confirmFn = null; f && f(); };
+
+/* ---------- navigation ---------- */
+function go(n) {
+  S.step = n; save();
+  document.querySelectorAll(".step").forEach(b => b.setAttribute("aria-current", String(+b.dataset.step === n)));
+  [0, 1, 2].forEach(i => $("#p" + i).hidden = i !== n);
+  if (n === 0) requestAnimationFrame(() => document.querySelectorAll("textarea.grow").forEach(grow));
+  if (n === 1) renderRec(); if (n === 2) renderPV();
+  window.scrollTo({ top: 0 });
+}
+document.querySelectorAll(".step").forEach(b => b.onclick = () => go(+b.dataset.step));
+document.querySelectorAll("[data-go]").forEach(b => b.onclick = () => go(+b.dataset.go));
+// Export / import : passer une séance de la version hébergée (micro) à l'aperçu Claude (rédaction), et inversement
+const ioOpen = mode => {
+  const exp = mode === "export";
+  $("#ioTitle").textContent = exp ? "Exporter la séance" : "Importer une séance";
+  $("#ioNote").textContent = exp ? "Texte copié. Collez-le dans « Importer » sur l'autre appareil ou l'autre version." : "Collez ici le texte exporté. La séance en cours sera remplacée.";
+  $("#ioText").value = exp ? JSON.stringify(S) : ""; $("#ioText").readOnly = exp;
+  $("#ioGo").hidden = exp; $("#ioBox").hidden = false; $("#ioText").focus();
+  if (exp) { $("#ioText").select(); try { navigator.clipboard.writeText($("#ioText").value).catch(() => { $("#ioNote").textContent = "Sélectionnez le texte ci-dessous et copiez-le."; }); } catch {} }
+};
+$("#btnExport").onclick = () => ioOpen("export");
+$("#btnImport").onclick = () => ioOpen("import");
+$("#ioClose").onclick = () => { $("#ioBox").hidden = true; };
+$("#ioGo").onclick = () => {
+  try {
+    const d = JSON.parse($("#ioText").value);
+    if (!d || !d.seance || !Array.isArray(d.seance.elus) || !Array.isArray(d.pv)) throw 0;
+    stopRec(); S = d; save(); renderAll(); go(S.step || 0); $("#ioBox").hidden = true; toast("Séance importée.");
+  } catch { $("#ioNote").textContent = "Ce texte n'est pas une séance exportée depuis Séance PV."; }
+};
+$("#btnNew").onclick =() => ask("Effacer la séance en cours et repartir du modèle de Gaillon ?", () => { stopRec(); S = GAILLON(); renderAll(); go(0); });
+
+/* ---------- 1 · Séance ---------- */
+const FIELDS = ["commune","dept","arr","date","heure","convoc","lieu","exercice"];
+FIELDS.forEach(f => $("#f_" + f).addEventListener("input", e => {
+  S.seance[f] = f === "exercice" ? +e.target.value || 0 : e.target.value; save(); renderTally();
+}));
+const counts = () => {
+  const e = S.seance.elus;
+  const p = e.filter(x => x.statut === "present").length, pw = e.filter(x => x.statut === "pouvoir").length, a = e.filter(x => x.statut === "absent").length;
+  return { p, pw, a, votants: p + pw, ex: +S.seance.exercice || e.length };
+};
+function renderTally() {
+  const c = counts(), q = c.p > c.ex / 2;
+  $("#tally").replaceChildren(
+    h("div", {}, h("strong", {}, String(c.p)), "présents"),
+    h("div", {}, h("strong", {}, String(c.pw)), "pouvoirs"),
+    h("div", {}, h("strong", {}, String(c.a)), "absents"),
+    h("div", {}, h("strong", {}, String(c.votants)), "votants"),
+    h("div", { class: "quorum " + (q ? "okq" : "ko") }, h("strong", {}, q ? "✓" : "✗"), q ? `quorum atteint (${Math.floor(c.ex / 2) + 1})` : `quorum non atteint (${Math.floor(c.ex / 2) + 1} requis)`)
+  );
+}
+const LABEL = { present: "Présent", absent: "Absent", pouvoir: "Pouvoir" };
+const NEXT = { present: "absent", absent: "pouvoir", pouvoir: "present" };
+function renderElus() {
+  const presents = S.seance.elus.filter(e => e.statut === "present").map(e => e.nom);
+  $("#elus").replaceChildren(...S.seance.elus.map((e, i) => {
+    const taken = S.seance.elus.filter((x, j) => j !== i && x.statut === "pouvoir").map(x => x.pour);
+    return h("div", { class: "elu" },
+      h("span", { class: "nom" }, e.nom, e.role ? h("span", { class: "role" }, e.role) : null),
+      h("span", { class: "row" },
+        h("button", { class: "chip " + e.statut, type: "button", "aria-label": `Statut de ${e.nom} : ${LABEL[e.statut]}`, onclick: () => {
+          e.statut = NEXT[e.statut]; if (e.statut !== "pouvoir") e.pour = "";
+          S.seance.elus.forEach(x => { if (x.pour === e.nom && e.statut !== "present") x.pour = ""; });
+          save(); renderElus(); } }, LABEL[e.statut]),
+        h("button", { class: "x", type: "button", "aria-label": "Retirer " + e.nom, onclick: () => { S.seance.elus.splice(i, 1); save(); renderElus(); } }, "×")),
+      e.statut === "pouvoir" ? h("select", { class: "pour", id: "pour" + i, "aria-label": "Pouvoir donné à", onchange: ev => { e.pour = ev.target.value; save(); } },
+        h("option", { value: "" }, "Pouvoir donné à…"),
+        ...presents.filter(n => n !== e.nom && (!taken.includes(n) || n === e.pour)).map(n => h("option", { value: n, selected: n === e.pour }, n))) : null
+    );
+  }));
+  ["president","secretaire"].forEach(f => {
+    $("#f_" + f).replaceChildren(h("option", { value: "" }, "Choisir…"), ...presents.map(n => h("option", { value: n, selected: n === S.seance[f] }, n)));
+  });
+  renderTally();
+}
+["president","secretaire"].forEach(f => $("#f_" + f).onchange = e => { S.seance[f] = e.target.value; save(); });
+const addElu = () => { const v = $("#newElu").value.trim(); if (!v) return; S.seance.elus.push({ nom: v, role: "", statut: "present", pour: "" }); $("#newElu").value = ""; save(); renderElus(); };
+$("#addElu").onclick = addElu; $("#newElu").onkeydown = e => { if (e.key === "Enter") addElu(); };
+
+function renderOdj() {
+  $("#odj").replaceChildren(...S.seance.odj.map((p, i) => h("li", {},
+    h("div", { class: "odj-row" },
+      (() => { const t = h("textarea", { id: "odj" + i, class: "grow", rows: "2", "aria-label": "Point " + (i + 1),
+        oninput: e => { S.seance.odj[i] = e.target.value.replace(/\n+/g, " "); grow(e.target); save(); },
+        onkeydown: e => { if (e.key === "Enter") e.preventDefault(); } }); t.value = p; return t; })(),
+      h("button", { class: "x", type: "button", "aria-label": "Retirer le point " + (i + 1), onclick: () => { S.seance.odj.splice(i, 1); save(); renderOdj(); } }, "×")))));
+  requestAnimationFrame(() => document.querySelectorAll("textarea.grow").forEach(grow));
+}
+function grow(t) { if (!t.offsetParent) return; t.style.height = "auto"; t.style.height = t.scrollHeight + 2 + "px"; }
+window.addEventListener("resize", () => document.querySelectorAll("textarea.grow").forEach(grow));
+const addPoint = () => {
+  const v = $("#newPoint").value.trim(); if (!v) return;
+  const qd = S.seance.odj.findIndex(p => /questions diverses/i.test(p));
+  qd >= 0 ? S.seance.odj.splice(qd, 0, v) : S.seance.odj.push(v);
+  $("#newPoint").value = ""; save(); renderOdj();
+};
+$("#addPoint").onclick = addPoint; $("#newPoint").onkeydown = e => { if (e.key === "Enter") addPoint(); };
+function renderSeance() { FIELDS.forEach(f => $("#f_" + f).value = S.seance[f] ?? ""); renderElus(); renderOdj(); }
+
+/* ---------- 2 · Enregistrement ---------- */
+let speaker = null, curPt = 0;
+const fmt = s => [Math.floor(s / 3600), Math.floor(s / 60) % 60, s % 60].map(n => String(n).padStart(2, "0")).join(":");
+function renderRec() {
+  const presents = S.seance.elus.filter(e => e.statut === "present").map(e => e.nom);
+  if (!speaker || !presents.includes(speaker)) speaker = S.seance.president || presents[0] || null;
+  $("#speakers").replaceChildren(...presents.map(n => h("button", { class: "chip", type: "button", "aria-pressed": String(n === speaker),
+    onclick: () => { flushInterim(); speaker = n; renderRec(); } }, n)));
+  if (curPt >= S.seance.odj.length) curPt = 0;
+  $("#curPoint").replaceChildren(...S.seance.odj.map((p, i) => h("option", { value: i, selected: i === curPt }, `${i + 1}. ${p}`)));
+  $("#clock").textContent = fmt(S.elapsed);
+  renderSegs(); setRecUI();
+}
+$("#curPoint").onchange = e => { flushInterim(); curPt = +e.target.value; };
+function renderSegs() {
+  $("#segCount").textContent = S.segments.length ? `${S.segments.length} interventions` : "";
+  if (!S.segments.length) { $("#segs").replaceChildren(h("div", { class: "empty" }, "Les interventions apparaîtront ici, horodatées et attribuées à l'orateur.")); return; }
+  $("#segs").replaceChildren(...S.segments.map((s, i) => h("div", { class: "seg" },
+    h("time", {}, s.t),
+    h("div", { style: "min-width:0" }, h("div", { class: "who" }, s.who || "Orateur non identifié"),
+      h("div", { class: "pt" }, "Point " + (s.pt + 1)), h("p", {}, s.text)),
+    h("button", { class: "x", type: "button", "aria-label": "Supprimer l'intervention", onclick: () => { S.segments.splice(i, 1); save(); renderSegs(); } }, "×"))));
+  const box = $("#segs"); box.scrollTop = box.scrollHeight;
+}
+const pushSeg = (text, who) => {
+  text = text.trim(); if (!text) return;
+  S.segments.push({ pt: curPt, t: fmt(S.elapsed), who: who ?? speaker ?? "", text }); save(); renderSegs();
+};
+$("#addSeg").onclick = () => { pushSeg($("#manual").value); $("#manual").value = ""; };
+
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+// Adresse du serveur de transcription (Cloudflare Worker). À renseigner une fois, à la mise en ligne.
+// Vide : l'appli utilise la reconnaissance vocale du navigateur.
+const TRANSCRIPTION_SERVER = "";
+const cfg = { engine: "gladia", server: TRANSCRIPTION_SERVER };
+const useGladia = () => cfg.engine === "gladia" && !!cfg.server.trim();
+
+let recording = false, starting = false, tick = null, wake = null, interimTxt = "", engineStop = null, engineName = null;
+function flushInterim() {
+  if (engineName === "gladia") return; // Gladia attribue chaque phrase à l'orateur actif à son début
+  if (interimTxt.trim()) { pushSeg(interimTxt); interimTxt = ""; $("#interim").textContent = ""; }
+}
+function micBlocked(reason) {
+  stopRec();
+  $("#micBanner").hidden = false;
+  $("#micBanner").textContent = reason + " Vous pouvez saisir les interventions à la main ci-dessous.";
+}
+function setRecUI() {
+  $("#recBtn").classList.toggle("on", recording);
+  $("#recBtn").setAttribute("aria-label", recording ? "Suspendre l'enregistrement" : "Démarrer l'enregistrement");
+  $("#liveTag").hidden = !recording;
+  $("#recState").textContent = starting ? "Connexion au micro…"
+    : recording ? "Transcription en cours. Touchez le nom de l'orateur quand la parole change."
+    : (S.elapsed ? "En pause. Touchez le bouton pour reprendre." : "Prêt. Touchez le bouton rouge pour lancer la transcription.");
+}
+async function startRec() {
+  if (starting || recording) return;
+  starting = true; $("#micBanner").hidden = true; setRecUI();
+  try {
+    engineName = useGladia() ? "gladia" : "browser";
+    engineStop = engineName === "gladia" ? await startGladia() : startBrowser();
+    recording = true;
+    tick = setInterval(() => { S.elapsed++; $("#clock").textContent = fmt(S.elapsed); if (S.elapsed % 10 === 0) save(); }, 1000);
+    navigator.wakeLock?.request("screen").then(w => wake = w).catch(() => {});
+  } catch (err) {
+    engineStop = null; starting = false;
+    micBlocked(err && err.known ? err.message : "Le micro n'a pas pu démarrer.");
+  }
+  starting = false; setRecUI();
+}
+function stopRec() {
+  if (!recording && !engineStop) return;
+  recording = false; clearInterval(tick);
+  try { engineStop && engineStop(); } catch {}
+  engineStop = null; flushInterim(); wake?.release?.().catch(() => {}); wake = null; save(); setRecUI();
+}
+$("#recBtn").onclick = () => recording ? stopRec() : startRec();
+const known = msg => Object.assign(new Error(msg), { known: true });
+
+function startBrowser() {
+  if (!SR) throw known("Ce navigateur ne propose pas la reconnaissance vocale. Utilisez Chrome ou Edge.");
+  const rec = new SR(); rec.lang = "fr-FR"; rec.continuous = true; rec.interimResults = true;
+  rec.onresult = e => {
+    let interim = "";
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const r = e.results[i];
+      if (r.isFinal) { pushSeg(r[0].transcript); interimTxt = ""; } else interim += r[0].transcript;
+    }
+    interimTxt = interim; $("#interim").textContent = interim;
+  };
+  rec.onerror = e => { if (["not-allowed","service-not-allowed","audio-capture"].includes(e.error)) micBlocked("Le micro n'est pas accessible ici (l'aperçu Claude bloque le micro)."); };
+  rec.onend = () => { if (recording) { try { rec.start(); } catch {} } };
+  rec.start();
+  return () => { rec.onend = null; rec.stop(); };
+}
+
+const serverUrl = p => cfg.server.trim().replace(/\/+$/, "") + p;
+const serverError = (status, body) => ({
+  403: "Ce site n'est pas autorisé par le serveur de transcription.",
+  502: `Gladia a refusé la session${body?.status ? " (erreur " + body.status + ")" : ""}. Vérifiez la clé et les crédits.`
+}[status] || `Le serveur a répondu une erreur (${status}).`);
+
+async function startGladia() {
+  if (!navigator.mediaDevices?.getUserMedia) throw known("Le micro n'est pas accessible ici (l'aperçu Claude bloque le micro).");
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
+  catch { throw known("Accès au micro refusé ou bloqué. Autorisez le micro pour ce site."); }
+  const stopTracks = () => stream.getTracks().forEach(t => t.stop());
+
+  let sess;
+  try {
+    const r = await fetch(serverUrl("/session"), { method: "POST", headers: { "Content-Type": "application/json" } });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) throw known(serverError(r.status, body));
+    if (!body.url) throw known("Réponse du serveur incomplète.");
+    sess = body;
+  } catch (e) { stopTracks(); throw e.known ? e : known("Serveur de transcription injoignable. Vérifiez son adresse."); }
+
+  let ctx;
+  try { ctx = new AudioContext({ sampleRate: 16000 }); } catch { ctx = new AudioContext(); }
+  const worklet = "class C extends AudioWorkletProcessor{process(i){const c=i[0]&&i[0][0];if(c)this.port.postMessage(c.slice(0));return true}}registerProcessor('cap',C)";
+  await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([worklet], { type: "application/javascript" })));
+  const src = ctx.createMediaStreamSource(stream);
+  const node = new AudioWorkletNode(ctx, "cap");
+  const mute = ctx.createGain(); mute.gain.value = 0;
+  src.connect(node); node.connect(mute); mute.connect(ctx.destination);
+
+  // Audio → PCM 16 bits, 16 kHz, mono, envoyé par paquets de 100 ms
+  const ratio = ctx.sampleRate / 16000;
+  let buf = new Int16Array(1600), n = 0, pos = 0, ws = null, closing = false, tries = 0;
+  const push = s => {
+    const v = Math.max(-1, Math.min(1, s));
+    buf[n++] = v < 0 ? v * 0x8000 : v * 0x7fff;
+    if (n === buf.length) { if (ws && ws.readyState === 1) ws.send(buf.buffer.slice(0)); n = 0; }
+  };
+  node.port.onmessage = e => {
+    const f = e.data;
+    for (; pos < f.length; pos += ratio) push(f[Math.floor(pos)]);
+    pos -= f.length;
+  };
+
+  const uttWho = new Map();
+  const open = () => {
+    ws = new WebSocket(sess.url);
+    ws.binaryType = "arraybuffer";
+    ws.onopen = () => { tries = 0; setRecUI(); };
+    ws.onmessage = ev => {
+      let m; try { m = JSON.parse(ev.data); } catch { return; }
+      if (m.type !== "transcript" || !m.data) return;
+      const id = m.data.id, text = (m.data.utterance && m.data.utterance.text || "").trim();
+      if (!uttWho.has(id)) uttWho.set(id, speaker || "");
+      if (m.data.is_final) {
+        if (text) pushSeg(text, uttWho.get(id));
+        uttWho.delete(id); interimTxt = ""; $("#interim").textContent = "";
+      } else { interimTxt = text; $("#interim").textContent = text; }
+    };
+    ws.onclose = ev => {
+      if (closing || ev.code === 1000) return;
+      if (recording && tries < 5) {
+        tries++; $("#recState").textContent = "Connexion à Gladia perdue, reconnexion…";
+        setTimeout(() => { if (recording) open(); }, 1000 * tries);
+      } else if (recording) micBlocked("La connexion à Gladia s'est interrompue.");
+    };
+  };
+  open();
+
+  return () => {
+    closing = true;
+    try { if (ws.readyState === 1) ws.send(JSON.stringify({ type: "stop_recording" })); } catch {}
+    try { node.port.onmessage = null; src.disconnect(); node.disconnect(); } catch {}
+    ctx.close().catch(() => {}); stopTracks();
+    setTimeout(() => { try { ws.close(1000); } catch {} }, 10000); // laisse arriver les dernières phrases
+  };
+}
+
+
+
+/* ---------- 3 · Procès-verbal : rédaction ---------- */
+let sample = null, genCtl = null, view = "edit";
+(async () => { try { sample = await window.claude?.use?.("sample"); } catch {} renderPV(); })();
+
+const presenceLines = () => {
+  const s = S.seance, c = counts();
+  const list = st => s.elus.filter(e => e.statut === st);
+  return {
+    c,
+    presents: list("present").map(e => e.nom).join(", ") || "aucun",
+    pouvoirs: list("pouvoir").map(e => `${e.nom} à ${e.pour || "[À compléter : mandataire]"}`).join(" ; ") || "aucun",
+    absents: list("absent").map(e => e.nom).join(", ") || "aucun",
+    quorum: c.p > c.ex / 2
+  };
+};
+const seanceText = () => {
+  const s = S.seance, p = presenceLines();
+  return [`Commune : ${s.commune} (${s.dept})`, `Date : ${s.date} à ${s.heure}`, `Lieu : ${s.lieu}`, `Convocation : ${s.convoc || "[non renseignée]"}`,
+    `Membres en exercice : ${p.c.ex} · Présents : ${p.c.p} · Pouvoirs : ${p.c.pw} · Votants : ${p.c.votants}`,
+    `Président de séance : ${s.president}`, `Secrétaire de séance : ${s.secretaire}`,
+    `Présents : ${p.presents}`, `Pouvoirs : ${p.pouvoirs}`, `Absents : ${p.absents}`,
+    "Ordre du jour :", ...s.odj.map((x, i) => `  ${i + 1}. ${x}`)].join("\n");
+};
+const transcriptText = () => S.segments.map(x => `[${x.t}] [Point ${x.pt + 1}] ${x.who || "Orateur inconnu"} : ${x.text}`).join("\n").slice(-180000);
+const RULES = `Tu rédiges le procès-verbal officiel d'une séance du conseil municipal de Gaillon (Eure), selon l'article L2121-15 du CGCT, en style administratif sobre, au passé et à la troisième personne. Les élus sont nommés « Prénom NOM ».
+Règles strictes :
+- N'invente rien. Si un résultat de vote, un montant, un nom ou un numéro manque, écris exactement « [À compléter : …] » à cet endroit.
+- Le nombre de voix (pour + contre + abstentions) ne peut pas dépasser le nombre de votants.
+- Pour chaque délibération : « Délibération n° … » (sinon [À compléter : numéro]), exposé résumé du rapporteur, débats essentiels attribués nommément, puis une ligne « Vote : X voix pour, Y contre, Z abstention(s) » avec les noms des opposants et abstentionnistes, puis la décision.
+- Ne rédige PAS la liste des présents, pouvoirs et absents : elle est ajoutée automatiquement.
+- Sections dans cet ordre : « Ouverture de la séance », une section par point de l'ordre du jour intitulée « Point N – <intitulé> », « Clôture » (heure de levée).`;
+
+async function generate() {
+  if (!sample) return;
+  if (!S.segments.length) { $("#genState").textContent = "La transcription est vide : enregistrez la séance ou ajoutez des interventions à l'étape 2."; return; }
+  genCtl = new AbortController();
+  $("#genBtn").disabled = true; $("#stopGen").hidden = false;
+  $("#genState").textContent = "Rédaction du procès-verbal… (de 30 secondes à 2 minutes)";
+  try {
+    const out = await sample.json(`${RULES}
+
+Réponds uniquement par un tableau JSON de sections : [{"titre": string, "texte": string}], les paragraphes d'une section séparés par une ligne vide dans "texte".
+
+INFORMATIONS DE SÉANCE
+${seanceText()}
+
+TRANSCRIPTION HORODATÉE
+${transcriptText()}`, { signal: genCtl.signal, cache: false });
+    if (!Array.isArray(out) || !out.length) throw { code: "invalid_json" };
+    S.pv = out.filter(x => x && x.titre).map((x, i) => ({ id: "g" + Date.now() + i, titre: String(x.titre), texte: String(x.texte || ""), status: "todo" }));
+    save();
+    $("#genState").textContent = "Projet rédigé. Relisez et validez chaque paragraphe.";
+  } catch (e) {
+    $("#genState").textContent = errCopy(e.code);
+  } finally { $("#genBtn").disabled = false; $("#stopGen").hidden = true; genCtl = null; renderPV(); }
+}
+$("#stopGen").onclick = () => genCtl?.abort();
+$("#genBtn").onclick = () => S.pv.some(p => p.status !== "todo") ? ask("Rédiger avec Claude remplace le PV actuel et vos validations. Continuer ?", generate) : generate();
+const errCopy = c => ({
+  cancelled: "Rédaction arrêtée.",
+  not_granted: "L'accès à Claude n'a pas été autorisé pour cette page.",
+  rate_limited: "Trop de demandes pour le moment. Réessayez dans quelques minutes.",
+  invalid_json: "La réponse n'était pas exploitable. Relancez la rédaction.",
+  prompt_too_large: "La transcription est trop longue pour une seule rédaction.",
+  session_expired: "Votre session a expiré : reconnectez-vous à Claude."
+}[c] || "La rédaction a échoué. Relancez-la.");
+
+async function regenOne(p, btn) {
+  if (!sample) return;
+  btn.disabled = true; btn.textContent = "Réécriture…";
+  try {
+    const { text } = await sample(`${RULES}
+
+Réécris uniquement la section « ${p.titre} » du procès-verbal, plus fidèle à la transcription. Réponds par le seul texte de la section, sans titre.
+
+Version actuelle :
+${p.texte}
+
+INFORMATIONS DE SÉANCE
+${seanceText()}
+
+TRANSCRIPTION
+${transcriptText()}`, { cache: false });
+    p.texte = text.trim(); p.status = "todo"; save();
+  } catch (e) { toast(errCopy(e.code)); }
+  renderPV();
+}
+
+const editing = new Set();
+const markTodo = txt => {
+  const frag = document.createDocumentFragment();
+  txt.split(/(\[À compléter[^\]]*\])/g).forEach(part => frag.append(part.startsWith("[À compléter") ? h("mark", { class: "todo-mark" }, part) : part));
+  return frag;
+};
+function renderPV() {
+  const n = S.pv.length, ok = S.pv.filter(p => p.status !== "todo").length, done = n && ok === n;
+  $("#pvTitle").textContent = n ? `Procès-verbal · ${ok}/${n} paragraphes validés` : "Procès-verbal";
+  $("#pvProgressTxt").textContent = done ? "Tout est validé : le PV est prêt à être signé." : "Validez, corrigez ou faites réécrire chaque paragraphe.";
+  $("#pvBar").style.width = n ? (ok / n * 100) + "%" : "0";
+  $("#genBtn").hidden = !sample;
+  if (!sample && !$("#genState").textContent) $("#genState").textContent = "La rédaction automatique s'active quand la page est ouverte dans Claude. En attendant, complétez le modèle à la main.";
+  $("#pdfBtn").textContent = done ? "Télécharger le PDF" : "Télécharger le projet (PDF)";
+  $("#pdfNote").textContent = done ? "" : "Tant qu'un paragraphe reste à valider, le PDF porte la mention « PROJET ».";
+  $("#pdfBtn").disabled = !window.jspdf;
+  if (!window.jspdf) $("#pdfNote").textContent = "Le moteur PDF n'a pas pu se charger. Rechargez la page.";
+
+  const p = presenceLines();
+  $("#viewEdit").replaceChildren(h("div", { class: "draft" },
+    h("div", { class: "fixed" }, `Liste de présence ajoutée automatiquement depuis l'appel : ${p.c.p} présents, ${p.c.pw} pouvoirs, ${p.c.a} absents, ${p.c.votants} votants.`),
+    ...S.pv.map(p => {
+      const isEd = editing.has(p.id), hasTodo = TODO.test(p.texte);
+      const pill = { todo: ["todo","À valider"], ok: ["ok","Validé"], edited: ["edited","Corrigé et validé"] }[p.status];
+      const ta = h("textarea", { id: "ta-" + p.id, "aria-label": "Texte de " + p.titre }); ta.value = p.texte;
+      return h("div", { class: "para " + p.status },
+        h("span", { class: "pill " + pill[0] }, pill[1]),
+        h("h4", {}, p.titre),
+        isEd ? ta : h("div", { class: "txt" }, markTodo(p.texte)),
+        h("div", { class: "acts" },
+          isEd ? [
+            h("button", { class: "btn primary", type: "button", onclick: () => {
+              p.texte = ta.value; editing.delete(p.id);
+              p.status = TODO.test(p.texte) ? "todo" : "edited"; save(); renderPV(); } }, "Enregistrer"),
+            h("button", { class: "btn ghost", type: "button", onclick: () => { editing.delete(p.id); renderPV(); } }, "Annuler")
+          ] : [
+            p.status === "todo"
+              ? h("button", { class: "btn ok", type: "button", disabled: hasTodo, onclick: () => { p.status = "ok"; save(); renderPV(); } }, "✓ Valider")
+              : h("button", { class: "btn ghost", type: "button", onclick: () => { p.status = "todo"; save(); renderPV(); } }, "Rouvrir"),
+            h("button", { class: "btn", type: "button", onclick: () => { editing.add(p.id); renderPV(); } }, "Modifier"),
+            sample && S.segments.length ? h("button", { class: "btn ghost", type: "button", onclick: e => regenOne(p, e.currentTarget) }, "Réécrire") : null
+          ]),
+        hasTodo && !isEd ? h("div", { class: "note", style: "margin-top:6px" }, "Complétez les mentions surlignées (bouton Modifier) avant de valider.") : null
+      );
+    })));
+  if (view === "prev") schedulePreview();
+}
+
+/* ---------- 3 · Procès-verbal : mise en page PDF ---------- */
+// Les polices PDF standard ne couvrent que le latin-1 : on normalise les quelques signes hors jeu.
+const clean = s => String(s).replace(/[’‘]/g, "'").replace(/[“”]/g, '"').replace(/[–—]/g, "-").replace(/…/g, "...")
+  .replace(/\s*€/g, " euros").replace(/œ/g, "oe").replace(/Œ/g, "OE").replace(/[  ]/g, " ").replace(/[^\x00-\xFF]/g, "?");
+
+function layout() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const s = S.seance, W = 210, H = 297, ML = 22, MR = 22, MT = 20, MB = 24, CW = W - ML - MR;
+  const done = S.pv.length && S.pv.every(p => p.status !== "todo");
+  const pages = [[]]; let y = MT;
+  const P = () => pages[pages.length - 1];
+  const font = (st, sz) => { doc.setFont("times", st); doc.setFontSize(sz); };
+  const LH = sz => sz * 0.3528 * 1.4;
+  const need = hh => { if (y + hh > H - MB) { pages.push([]); y = MT + 4; } };
+  const text = (str, x, yy, o = {}) => P().push({ t: "text", s: str, x, y: yy, size: 11, style: "normal", align: "left", color: 20, ...o });
+  const para = (str, { size = 11, style = "normal", gap = 2.4, indent = 0, color } = {}) => {
+    font(style, size); const lh = LH(size);
+    doc.splitTextToSize(clean(str), CW - indent).forEach(l => { need(lh); y += lh; text(l, ML + indent, y, { size, style, color }); });
+    y += gap;
+  };
+
+  // En-tête administratif
+  [["DÉPARTEMENT DE " + (s.dept || "").toUpperCase(), "bold"], ["ARRONDISSEMENT DES " + (s.arr || "").replace(/^Les\s+/i, "").toUpperCase(), "normal"], ["COMMUNE DE " + (s.commune || "").toUpperCase(), "bold"]]
+    .forEach(([l, st], i) => text(clean(l), ML, MT + 4 + i * 4.6, { size: 9, style: st }));
+  text("RÉPUBLIQUE FRANÇAISE", W - MR, MT + 4, { size: 9, style: "bold", align: "right" });
+  text("Liberté · Égalité · Fraternité", W - MR, MT + 8.6, { size: 9, style: "italic", align: "right" });
+  y = MT + 26;
+  text("PROCÈS-VERBAL", W / 2, y, { size: 16, style: "bold", align: "center" }); y += 7;
+  text("DE LA SÉANCE DU CONSEIL MUNICIPAL", W / 2, y, { size: 11.5, style: "bold", align: "center" }); y += 6.5;
+  text(clean(`du ${longDate(s.date)} à ${heureTxt(s.heure)}`), W / 2, y, { size: 11, style: "italic", align: "center" }); y += 7;
+
+  // Tableau des effectifs
+  const pr = presenceLines(), cells = [["En exercice", pr.c.ex], ["Présents", pr.c.p], ["Pouvoirs", pr.c.pw], ["Votants", pr.c.votants]];
+  const bw = CW / 4;
+  P().push({ t: "rect", x: ML, y, w: CW, h: 15 });
+  cells.forEach(([lab, v], i) => {
+    if (i) P().push({ t: "line", x1: ML + bw * i, y1: y, x2: ML + bw * i, y2: y + 15 });
+    text(lab.toUpperCase(), ML + bw * i + bw / 2, y + 5.2, { size: 7.5, align: "center", color: 90 });
+    text(String(v), ML + bw * i + bw / 2, y + 11.8, { size: 13, style: "bold", align: "center" });
+  });
+  y += 21;
+
+  para(`Date de convocation : ${s.convoc ? longDate(s.convoc, false) : "[À compléter]"}. Présidence : ${s.president || "[À compléter]"}.`, { size: 10.5 });
+  para(`Présents : ${pr.presents}.`, { size: 10.5 });
+  para(`Absents ayant donné pouvoir : ${pr.pouvoirs}.`, { size: 10.5 });
+  para(`Absents : ${pr.absents}.`, { size: 10.5 });
+  para(`Secrétaire de séance : ${s.secretaire || "[À compléter]"}. ${pr.quorum ? "Le quorum étant atteint, le conseil peut valablement délibérer." : "Le quorum n'est pas atteint."}`, { size: 10.5, gap: 4 });
+  P().push({ t: "line", x1: ML, y1: y, x2: W - MR, y2: y, w: 0.3 }); y += 4;
+
+  // Sections
+  S.pv.forEach(sec => {
+    need(LH(11.5) + LH(11) * 2 + 4); y += 3;
+    para(sec.titre, { size: 11.5, style: "bold", gap: 1.2 });
+    sec.texte.split(/\n{2,}/).forEach(block => block.split("\n").forEach((line, i, arr) => para(line, { gap: i === arr.length - 1 ? 2.6 : 0.4 })));
+  });
+
+  // Signatures
+  need(42); y += 10;
+  [["Le Maire,", s.president], ["Le secrétaire de séance,", s.secretaire]].forEach(([lab, nm], i) => {
+    const x = ML + i * (CW / 2 + 6);
+    text(lab, x, y, { size: 11 }); text(clean(nm || ""), x, y + 5.5, { size: 11, style: "bold" });
+  });
+  y += 32;
+  need(14);
+  para("Procès-verbal arrêté au commencement de la séance suivante, signé par le maire et le secrétaire de séance, puis publié sur le site internet de la commune dans la semaine qui suit son adoption (article L2121-15 du CGCT).", { size: 8.5, style: "italic", color: 90 });
+
+  // Pied de page et filigrane
+  const n = pages.length;
+  pages.forEach((pg, i) => {
+    if (!done) pg.unshift({ t: "wm" });
+    pg.push({ t: "line", x1: ML, y1: H - 14, x2: W - MR, y2: H - 14, w: 0.2, color: 150 });
+    pg.push({ t: "text", s: clean(`Commune de ${s.commune} · Conseil municipal du ${shortDate(s.date)}${done ? "" : " · PROJET"}`), x: ML, y: H - 9.5, size: 8, style: "normal", align: "left", color: 100 });
+    pg.push({ t: "text", s: `Page ${i + 1} / ${n}`, x: W - MR, y: H - 9.5, size: 8, style: "normal", align: "right", color: 100 });
+  });
+  return { pages, done };
+}
+
+function toPDF(pages) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  doc.setProperties({ title: `Procès-verbal du conseil municipal de ${S.seance.commune} du ${shortDate(S.seance.date)}`, creator: "Séance PV" });
+  pages.forEach((pg, i) => {
+    if (i) doc.addPage();
+    pg.forEach(o => {
+      if (o.t === "wm") {
+        doc.setFont("times", "bold"); doc.setFontSize(96); doc.setTextColor(232);
+        const w = doc.getTextWidth("PROJET"), a = 35 * Math.PI / 180;
+        doc.text("PROJET", 105 - Math.cos(a) * w / 2, 160 + Math.sin(a) * w / 2, { angle: 35 });
+      } else if (o.t === "text") {
+        doc.setFont("times", o.style); doc.setFontSize(o.size); doc.setTextColor(o.color ?? 20);
+        doc.text(o.s, o.x, o.y, { align: o.align });
+      } else if (o.t === "line") {
+        doc.setDrawColor(o.color ?? 40); doc.setLineWidth(o.w ?? 0.3); doc.line(o.x1, o.y1, o.x2, o.y2);
+      } else if (o.t === "rect") {
+        doc.setDrawColor(60); doc.setLineWidth(0.3); doc.rect(o.x, o.y, o.w, o.h);
+      }
+    });
+  });
+  return doc;
+}
+
+const SERIF = '"Times New Roman", Times, "Liberation Serif", "Nimbus Roman", serif';
+function drawPage(canvas, ops) {
+  const cssW = canvas.getBoundingClientRect().width || 600;
+  const k = (cssW * (window.devicePixelRatio || 1)) / 210;
+  canvas.width = Math.round(210 * k); canvas.height = Math.round(297 * k);
+  const g = canvas.getContext("2d");
+  g.fillStyle = "#fff"; g.fillRect(0, 0, canvas.width, canvas.height);
+  const gray = v => `rgb(${v},${v},${v})`;
+  const fontOf = (style, size) => `${style === "italic" ? "italic " : ""}${style === "bold" ? "bold " : ""}${size * 0.3528 * k}px ${SERIF}`;
+  ops.forEach(o => {
+    if (o.t === "wm") {
+      g.save(); g.translate(105 * k, 160 * k); g.rotate(-35 * Math.PI / 180);
+      g.font = fontOf("bold", 96); g.fillStyle = gray(232); g.textAlign = "center"; g.textBaseline = "middle"; g.fillText("PROJET", 0, 0); g.restore();
+    } else if (o.t === "text") {
+      g.font = fontOf(o.style, o.size); g.fillStyle = gray(o.color ?? 20); g.textAlign = o.align; g.textBaseline = "alphabetic";
+      g.fillText(o.s, o.x * k, o.y * k);
+    } else if (o.t === "line") {
+      g.strokeStyle = gray(o.color ?? 40); g.lineWidth = (o.w ?? 0.3) * k; g.beginPath(); g.moveTo(o.x1 * k, o.y1 * k); g.lineTo(o.x2 * k, o.y2 * k); g.stroke();
+    } else if (o.t === "rect") {
+      g.strokeStyle = gray(60); g.lineWidth = 0.3 * k; g.strokeRect(o.x * k, o.y * k, o.w * k, o.h * k);
+    }
+  });
+}
+let prevT;
+const schedulePreview = () => { clearTimeout(prevT); prevT = setTimeout(renderPreview, 150); };
+function renderPreview() {
+  const box = $("#viewPrev");
+  if (!window.jspdf) { box.replaceChildren(h("div", { class: "empty" }, "Le moteur PDF n'a pas pu se charger. Rechargez la page.")); return; }
+  const { pages } = layout();
+  const canvases = pages.map((_, i) => h("canvas", { "aria-label": `Page ${i + 1} du procès-verbal` }));
+  box.replaceChildren(...pages.flatMap((_, i) => [canvases[i], h("div", { class: "cap" }, `Page ${i + 1} / ${pages.length}`)]));
+  requestAnimationFrame(() => pages.forEach((pg, i) => drawPage(canvases[i], pg)));
+}
+function setView(v) {
+  view = v;
+  $("#tabEdit").setAttribute("aria-selected", String(v === "edit"));
+  $("#tabPrev").setAttribute("aria-selected", String(v === "prev"));
+  $("#viewEdit").hidden = v !== "edit"; $("#viewPrev").hidden = v !== "prev";
+  if (v === "prev") renderPreview();
+}
+$("#tabEdit").onclick = () => setView("edit");
+$("#tabPrev").onclick = () => setView("prev");
+let resizeT; window.addEventListener("resize", () => { if (view === "prev") { clearTimeout(resizeT); resizeT = setTimeout(renderPreview, 200); } });
+
+/* ---------- export ---------- */
+let downloads;
+(async () => { try { downloads = await window.claude?.use?.("downloads"); } catch {} })();
+const fileName = () => `PV-CM-${clean(S.seance.commune || "commune").replace(/[^A-Za-z0-9À-ÿ-]+/g, "-")}-${S.seance.date}${layout().done ? "" : "-projet"}.pdf`;
+$("#pdfBtn").onclick = async () => {
+  if (!window.jspdf) return;
+  const doc = toPDF(layout().pages), name = fileName();
+  if (downloads) {
+    try { await downloads.save({ filename: name, data: doc.output("blob") }); toast("PDF enregistré."); }
+    catch (e) {
+      if (e?.code === "declined") return;
+      toast(e?.code === "extension_not_enabled" ? "Le téléchargement de PDF n'est pas disponible ici." : "Le téléchargement a échoué. Réessayez.");
+    }
+  } else { try { doc.save(name); } catch { toast("Le téléchargement n'est pas disponible ici."); } }
+};
+const pvText = () => {
+  const s = S.seance, p = presenceLines();
+  return [`COMMUNE DE ${s.commune.toUpperCase()} (${s.dept})`, `Procès-verbal de la séance du conseil municipal du ${longDate(s.date)} à ${heureTxt(s.heure)}`, "",
+    `Membres en exercice : ${p.c.ex} – Présents : ${p.c.p} – Pouvoirs : ${p.c.pw} – Votants : ${p.c.votants}`,
+    `Présents : ${p.presents}.`, `Absents ayant donné pouvoir : ${p.pouvoirs}.`, `Absents : ${p.absents}.`, `Secrétaire de séance : ${s.secretaire}.`, "",
+    ...S.pv.flatMap(x => [x.titre.toUpperCase(), x.texte, ""]),
+    `Le Maire, ${s.president}`, `Le secrétaire de séance, ${s.secretaire}`].join("\n");
+};
+$("#copyBtn").onclick = () => {
+  const t = pvText();
+  const fb = () => { const a = $("#copyFallback"); a.hidden = false; a.value = t; a.focus(); a.select(); toast("Sélectionnez le texte et copiez-le."); };
+  try { navigator.clipboard.writeText(t).then(() => toast("Texte du PV copié."), fb); } catch { fb(); }
+};
+
+function renderAll() { renderSeance(); renderRec(); renderPV(); }
+renderAll(); setView("edit"); go(S.step || 0);
+})();
+</script>
+
+</body>
+</html>
