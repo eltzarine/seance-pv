@@ -70,8 +70,8 @@ def new_page(browser, device=None, sr_mode=None, server=None, setup=None):
     errors = []
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.on("console", lambda m: m.type == "error" and errors.append(m.text))
-    if sr_mode:
-        page.add_init_script(f"window.__SR_MODE={json.dumps(sr_mode)};" + MOCK_SR)
+    if sr_mode:  # dictée du navigateur : pas de serveur Gladia
+        page.add_init_script(f"window.SEANCE_PV_SERVER='';window.__SR_MODE={json.dumps(sr_mode)};" + MOCK_SR)
     if server:
         page.add_init_script(f"window.SEANCE_PV_SERVER={json.dumps(server)};")
     page.add_init_script("try{localStorage.clear()}catch(e){}")

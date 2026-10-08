@@ -20,6 +20,7 @@ Comptez 20 minutes, depuis un ordinateur.
 4. Allez dans **Settings → Variables and Secrets** et ajoutez deux variables :
    - `GLADIA_API_KEY` (type Secret) : votre clé Gladia.
    - `ALLOWED_ORIGINS` (type Text) : `https://eltzarine.github.io`. Mettez seulement le domaine, sans `/seance-pv`.
+   L'appli attend le worker à l'adresse `https://seance-pv.cesar-poirrier.workers.dev` : gardez le nom `seance-pv`.
 5. Notez l'adresse du worker, par exemple `https://seance-pv.xxxx.workers.dev`.
 
 ## 3. Appli sur GitHub Pages (index.html)

@@ -529,8 +529,8 @@ if (DIAG) {
 }
 // Adresse du serveur de transcription (Cloudflare Worker). À renseigner une fois, à la mise en ligne.
 // Vide : l'appli utilise la reconnaissance vocale du navigateur.
-const TRANSCRIPTION_SERVER = "";
-const serverBase = () => (window.SEANCE_PV_SERVER || TRANSCRIPTION_SERVER || "").trim().replace(/\/+$/, "");
+const TRANSCRIPTION_SERVER = "https://seance-pv.cesar-poirrier.workers.dev";
+const serverBase = () => (window.SEANCE_PV_SERVER ?? TRANSCRIPTION_SERVER ?? "").trim().replace(/\/+$/, "");
 const useGladia = () => !!serverBase();
 const IN_CLAUDE = !!window.claude;
 const IS_IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
