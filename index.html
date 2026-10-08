@@ -133,6 +133,18 @@ ol.odj{gap:10px}
 .desk .cap{font:500 12px var(--f-mono);color:var(--muted)}
 .empty{text-align:center;padding:36px 16px;color:var(--muted)}
 .io{display:grid;gap:10px}
+.console{display:grid;gap:14px}
+.meter{height:4px;border-radius:99px;background:var(--line);overflow:hidden}
+.meter span{display:block;height:100%;width:0;background:var(--ok);transition:width .08s linear}
+.ctx{display:grid;gap:10px}
+.ctx .lbl,.livehead .lbl{font:600 12px var(--f-ui);text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+.ctx-who{display:grid;gap:6px;min-width:0}
+.speakers{flex-wrap:nowrap!important;overflow-x:auto;max-height:none!important;padding-bottom:4px;scrollbar-width:thin}
+.livebox{border:1px solid var(--line);border-radius:8px;background:var(--paper);padding:10px 12px;max-height:46vh;min-height:160px;overflow:auto;display:flex;flex-direction:column}
+.livehead{display:flex;justify-content:space-between;gap:8px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.livebox .segs{max-height:none;overflow:visible;border-top:0}
+.livebox .interim{padding-top:8px}
+.livebox .interim:not(:empty)::before{content:"… ";color:var(--rec);font-style:normal;font-weight:700}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:8px;font-size:14px;z-index:20;max-width:calc(100% - 32px)}
 @media (max-width:480px){
   .seg{grid-template-columns:52px 1fr auto}
@@ -211,29 +223,29 @@ ol.odj{gap:10px}
 
   <!-- 2 · Enregistrement -->
   <section class="panel" id="p1" hidden>
-    <div class="card">
+    <div class="card console">
       <div class="recbar">
         <button class="recbtn" id="recBtn" type="button" aria-label="Démarrer l'enregistrement"><span></span></button>
         <div style="min-width:0">
           <div class="clock" id="clock">00:00:00</div>
-          <div id="recState" class="note"></div>
+          <div id="recState" class="note" role="status" aria-live="polite"></div>
         </div>
         <span class="live" id="liveTag" hidden><i></i>En direct</span>
       </div>
-      <div id="micBanner" class="banner" style="margin-top:12px" hidden></div>
+      <div class="meter" id="meter" hidden aria-hidden="true"><span id="meterBar"></span></div>
+      <div id="micBanner" class="banner" hidden></div>
+      <div class="ctx">
+        <label>Point en cours<select id="curPoint"></select></label>
+        <div class="ctx-who"><span class="lbl">La parole est à <span style="text-transform:none;letter-spacing:0;font-weight:400">(touchez l'orateur)</span></span><div class="speakers" id="speakers"></div></div>
+      </div>
+      <div class="livebox" id="livebox" aria-label="Transcription">
+        <div class="livehead"><span class="lbl">Transcription</span><span class="note" id="segCount"></span></div>
+        <div class="segs" id="segs"></div>
+        <div class="interim" id="interim" aria-live="polite"></div>
+      </div>
     </div>
     <div class="card">
-      <h3>Point en cours</h3>
-      <select id="curPoint" aria-label="Point en cours"></select>
-      <h3 style="margin-top:14px">La parole est à</h3>
-      <div class="speakers" id="speakers"></div>
-      <p class="note" style="margin:8px 0 0">Le président touche le nom de l'élu qui prend la parole : chaque intervention lui est attribuée.</p>
-    </div>
-    <div class="card">
-      <div class="spread"><h3 style="margin:0">Transcription</h3><span class="note" id="segCount"></span></div>
-      <div class="interim" id="interim"></div>
-      <div class="segs" id="segs"></div>
-      <div style="display:grid;gap:8px;margin-top:12px">
+      <div style="display:grid;gap:8px">
         <label for="manual">Ajouter une intervention à la main</label>
         <textarea id="manual" rows="2" placeholder="Texte de l'intervention, attribuée à l'orateur sélectionné"></textarea>
         <div class="row"><button class="btn" id="addSeg" type="button">Ajouter à la transcription</button></div>
@@ -275,7 +287,6 @@ ol.odj{gap:10px}
 </div>
 <div class="toast" id="toast" hidden></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
 (() => {
 const KEY = "seance-pv-gaillon-v2";
@@ -466,22 +477,23 @@ function renderRec() {
   const presents = S.seance.elus.filter(e => e.statut === "present").map(e => e.nom);
   if (!speaker || !presents.includes(speaker)) speaker = S.seance.president || presents[0] || null;
   $("#speakers").replaceChildren(...presents.map(n => h("button", { class: "chip", type: "button", "aria-pressed": String(n === speaker),
-    onclick: () => { flushInterim(); speaker = n; renderRec(); } }, n)));
+    onclick: () => { flushInterim(); speaker = n; renderSpeakers(); } }, n)));
   if (curPt >= S.seance.odj.length) curPt = 0;
   $("#curPoint").replaceChildren(...S.seance.odj.map((p, i) => h("option", { value: i, selected: i === curPt }, `${i + 1}. ${p}`)));
   $("#clock").textContent = fmt(S.elapsed);
   renderSegs(); setRecUI();
 }
+function renderSpeakers() { $("#speakers").querySelectorAll(".chip").forEach(c => c.setAttribute("aria-pressed", String(c.textContent === speaker))); }
 $("#curPoint").onchange = e => { flushInterim(); curPt = +e.target.value; };
 function renderSegs() {
-  $("#segCount").textContent = S.segments.length ? `${S.segments.length} interventions` : "";
+  $("#segCount").textContent = S.segments.length ? `${S.segments.length} intervention${S.segments.length > 1 ? "s" : ""}` : "";
   if (!S.segments.length) { $("#segs").replaceChildren(h("div", { class: "empty" }, "Les interventions apparaîtront ici, horodatées et attribuées à l'orateur.")); return; }
   $("#segs").replaceChildren(...S.segments.map((s, i) => h("div", { class: "seg" },
     h("time", {}, s.t),
     h("div", { style: "min-width:0" }, h("div", { class: "who" }, s.who || "Orateur non identifié"),
       h("div", { class: "pt" }, "Point " + (s.pt + 1)), h("p", {}, s.text)),
     h("button", { class: "x", type: "button", "aria-label": "Supprimer l'intervention", onclick: () => { S.segments.splice(i, 1); save(); renderSegs(); } }, "×"))));
-  const box = $("#segs"); box.scrollTop = box.scrollHeight;
+  scrollLive();
 }
 const pushSeg = (text, who) => {
   text = text.trim(); if (!text) return;
@@ -493,38 +505,54 @@ const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 // Adresse du serveur de transcription (Cloudflare Worker). À renseigner une fois, à la mise en ligne.
 // Vide : l'appli utilise la reconnaissance vocale du navigateur.
 const TRANSCRIPTION_SERVER = "";
-const cfg = { engine: "gladia", server: TRANSCRIPTION_SERVER };
-const useGladia = () => cfg.engine === "gladia" && !!cfg.server.trim();
+const serverBase = () => (window.SEANCE_PV_SERVER || TRANSCRIPTION_SERVER || "").trim().replace(/\/+$/, "");
+const useGladia = () => !!serverBase();
+const IN_CLAUDE = !!window.claude;
+const IS_IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 
 let recording = false, starting = false, tick = null, wake = null, interimTxt = "", engineStop = null, engineName = null;
+const scrollLive = () => { const b = $("#livebox"); if (b) b.scrollTop = b.scrollHeight; };
+const setInterim = t => { interimTxt = t; $("#interim").textContent = t; scrollLive(); };
 function flushInterim() {
   if (engineName === "gladia") return; // Gladia attribue chaque phrase à l'orateur actif à son début
-  if (interimTxt.trim()) { pushSeg(interimTxt); interimTxt = ""; $("#interim").textContent = ""; }
+  if (interimTxt.trim()) { const t = interimTxt; setInterim(""); pushSeg(t); }
 }
+function showProblem(msg) { $("#micBanner").hidden = false; $("#micBanner").textContent = msg; }
 function micBlocked(reason) {
   stopRec();
-  $("#micBanner").hidden = false;
-  $("#micBanner").textContent = reason + " Vous pouvez saisir les interventions à la main ci-dessous.";
+  showProblem(reason + " Vous pouvez saisir les interventions à la main en attendant.");
 }
-function setRecUI() {
+const known = msg => Object.assign(new Error(msg), { known: true });
+const blockedHere = () => IN_CLAUDE
+  ? "Le micro est bloqué dans l'aperçu Claude : ouvrez l'appli en ligne (eltzarine.github.io/seance-pv) pour enregistrer."
+  : IS_IOS ? "Safari n'a pas accès au micro. Autorisez-le : Réglages › Apps › Safari › Microphone, puis rechargez la page."
+  : "Le navigateur n'a pas accès au micro. Autorisez le micro pour ce site (icône à gauche de l'adresse), puis réessayez.";
+
+function setRecUI(msg) {
   $("#recBtn").classList.toggle("on", recording);
   $("#recBtn").setAttribute("aria-label", recording ? "Suspendre l'enregistrement" : "Démarrer l'enregistrement");
+  $("#recBtn").disabled = starting;
   $("#liveTag").hidden = !recording;
-  $("#recState").textContent = starting ? "Connexion au micro…"
-    : recording ? "Transcription en cours. Touchez le nom de l'orateur quand la parole change."
-    : (S.elapsed ? "En pause. Touchez le bouton pour reprendre." : "Prêt. Touchez le bouton rouge pour lancer la transcription.");
+  $("#meter").hidden = !(recording && engineName === "gladia");
+  $("#recState").textContent = msg || (starting ? "Ouverture du micro…"
+    : recording ? "Parlez, le texte s'affiche ci-dessous."
+    : (S.elapsed ? "En pause. Touchez le bouton rouge pour reprendre." : "Touchez le bouton rouge pour lancer la transcription."));
 }
 async function startRec() {
   if (starting || recording) return;
   starting = true; $("#micBanner").hidden = true; setRecUI();
+  // Sur iPhone, le son ne démarre que s'il est créé pendant le geste (le toucher) : on le prépare ici, avant toute attente.
+  let ctx = null;
+  if (useGladia()) { try { ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 }); } catch { try { ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch {} } ctx?.resume?.().catch(() => {}); }
   try {
     engineName = useGladia() ? "gladia" : "browser";
-    engineStop = engineName === "gladia" ? await startGladia() : startBrowser();
+    engineStop = engineName === "gladia" ? await startGladia(ctx) : startBrowser();
     recording = true;
     tick = setInterval(() => { S.elapsed++; $("#clock").textContent = fmt(S.elapsed); if (S.elapsed % 10 === 0) save(); }, 1000);
     navigator.wakeLock?.request("screen").then(w => wake = w).catch(() => {});
   } catch (err) {
-    engineStop = null; starting = false;
+    engineStop = null; ctx?.close?.().catch(() => {});
+    starting = false;
     micBlocked(err && err.known ? err.message : "Le micro n'a pas pu démarrer.");
   }
   starting = false; setRecUI();
@@ -532,95 +560,126 @@ async function startRec() {
 function stopRec() {
   if (!recording && !engineStop) return;
   recording = false; clearInterval(tick);
-  try { engineStop && engineStop(); } catch {}
-  engineStop = null; flushInterim(); wake?.release?.().catch(() => {}); wake = null; save(); setRecUI();
+  const stop = engineStop; engineStop = null;
+  try { stop && stop(); } catch {}
+  flushInterim(); wake?.release?.().catch(() => {}); wake = null; save(); setRecUI();
 }
 $("#recBtn").onclick = () => recording ? stopRec() : startRec();
-const known = msg => Object.assign(new Error(msg), { known: true });
 
+/* Reconnaissance du navigateur (Chrome, Edge, Safari).
+   Safari sur iPhone ne marque presque jamais les phrases comme terminées et s'arrête au moindre silence :
+   on valide donc la phrase après 1,5 s sans nouveau mot, puis on relance l'écoute. */
 function startBrowser() {
-  if (!SR) throw known("Ce navigateur ne propose pas la reconnaissance vocale. Utilisez Chrome ou Edge.");
-  const rec = new SR(); rec.lang = "fr-FR"; rec.continuous = true; rec.interimResults = true;
-  rec.onresult = e => {
-    let interim = "";
-    for (let i = e.resultIndex; i < e.results.length; i++) {
-      const r = e.results[i];
-      if (r.isFinal) { pushSeg(r[0].transcript); interimTxt = ""; } else interim += r[0].transcript;
-    }
-    interimTxt = interim; $("#interim").textContent = interim;
+  if (!SR) throw known(IS_IOS ? "La reconnaissance vocale n'est pas disponible dans ce navigateur. Utilisez Safari." : "La reconnaissance vocale n'est pas disponible dans ce navigateur. Utilisez Chrome, Edge ou Safari.");
+  let rec = null, alive = true, silence = null, fails = 0, gotAudio = false;
+  const watchdog = setTimeout(() => { if (alive && !gotAudio) setRecUI("Le micro ne répond pas. Vérifiez qu'il est autorisé et qu'aucune autre appli ne l'utilise."); }, 5000);
+  const make = () => {
+    rec = new SR();
+    rec.lang = "fr-FR"; rec.continuous = !IS_IOS; rec.interimResults = true; rec.maxAlternatives = 1;
+    rec.onaudiostart = () => { gotAudio = true; fails = 0; if (recording) setRecUI(); };
+    rec.onresult = e => {
+      let fin = "", interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const r = e.results[i];
+        (r.isFinal ? (fin += r[0].transcript + " ") : (interim += r[0].transcript));
+      }
+      if (fin.trim()) { setInterim(""); pushSeg(fin); }
+      setInterim(interim);
+      clearTimeout(silence);
+      if (interim.trim()) silence = setTimeout(() => { try { rec.stop(); } catch {} }, 1500);
+    };
+    rec.onerror = e => {
+      if (e.error === "no-speech" || e.error === "aborted") return; // silence : on relance simplement
+      if (e.error === "not-allowed") { alive = false; micBlocked(blockedHere()); }
+      else if (e.error === "service-not-allowed") { alive = false; micBlocked(IS_IOS ? "La dictée d'Apple est désactivée. Activez-la : Réglages › Général › Clavier › Activer Dictée, puis réessayez." : blockedHere()); }
+      else if (e.error === "audio-capture") { alive = false; micBlocked("Aucun micro n'a été trouvé sur cet appareil."); }
+      else if (e.error === "network") { fails++; setRecUI("Connexion au service de dictée perdue, nouvelle tentative…"); }
+      else fails++;
+    };
+    rec.onend = () => {
+      clearTimeout(silence);
+      flushInterim();
+      if (!alive || !recording) return;
+      if (fails > 5) { alive = false; micBlocked("La dictée s'est arrêtée plusieurs fois."); return; }
+      setTimeout(() => { if (alive && recording) { try { make(); rec.start(); } catch { fails++; } } }, 250);
+    };
   };
-  rec.onerror = e => { if (["not-allowed","service-not-allowed","audio-capture"].includes(e.error)) micBlocked("Le micro n'est pas accessible ici (l'aperçu Claude bloque le micro)."); };
-  rec.onend = () => { if (recording) { try { rec.start(); } catch {} } };
-  rec.start();
-  return () => { rec.onend = null; rec.stop(); };
+  make();
+  rec.start(); // dans le geste : indispensable sur Safari
+  return () => { alive = false; clearTimeout(silence); clearTimeout(watchdog); try { rec.onend = null; rec.stop(); } catch {} };
 }
 
-const serverUrl = p => cfg.server.trim().replace(/\/+$/, "") + p;
 const serverError = (status, body) => ({
   403: "Ce site n'est pas autorisé par le serveur de transcription.",
-  502: `Gladia a refusé la session${body?.status ? " (erreur " + body.status + ")" : ""}. Vérifiez la clé et les crédits.`
-}[status] || `Le serveur a répondu une erreur (${status}).`);
+  502: `Le service de transcription a refusé la session${body?.status ? " (erreur " + body.status + ")" : ""}.`
+}[status] || `Le serveur de transcription a répondu une erreur (${status}).`);
 
-async function startGladia() {
-  if (!navigator.mediaDevices?.getUserMedia) throw known("Le micro n'est pas accessible ici (l'aperçu Claude bloque le micro).");
+/* Gladia : micro → PCM 16 bits 16 kHz mono → WebSocket, par paquets de 100 ms. */
+async function startGladia(ctx) {
+  if (!navigator.mediaDevices?.getUserMedia) throw known(blockedHere());
+  if (!ctx) throw known("Le son n'a pas pu démarrer sur cet appareil.");
   let stream;
   try { stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
-  catch { throw known("Accès au micro refusé ou bloqué. Autorisez le micro pour ce site."); }
+  catch (e) { throw known(e && e.name === "NotFoundError" ? "Aucun micro n'a été trouvé sur cet appareil." : blockedHere()); }
   const stopTracks = () => stream.getTracks().forEach(t => t.stop());
 
   let sess;
   try {
-    const r = await fetch(serverUrl("/session"), { method: "POST", headers: { "Content-Type": "application/json" } });
+    const r = await fetch(serverBase() + "/session", { method: "POST", headers: { "Content-Type": "application/json" } });
     const body = await r.json().catch(() => ({}));
     if (!r.ok) throw known(serverError(r.status, body));
-    if (!body.url) throw known("Réponse du serveur incomplète.");
+    if (!body.url) throw known("Réponse du serveur de transcription incomplète.");
     sess = body;
-  } catch (e) { stopTracks(); throw e.known ? e : known("Serveur de transcription injoignable. Vérifiez son adresse."); }
+  } catch (e) { stopTracks(); throw e.known ? e : known("Serveur de transcription injoignable. Vérifiez la connexion internet."); }
 
-  let ctx;
-  try { ctx = new AudioContext({ sampleRate: 16000 }); } catch { ctx = new AudioContext(); }
+  await ctx.resume().catch(() => {});
   const worklet = "class C extends AudioWorkletProcessor{process(i){const c=i[0]&&i[0][0];if(c)this.port.postMessage(c.slice(0));return true}}registerProcessor('cap',C)";
-  await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([worklet], { type: "application/javascript" })));
+  try { await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([worklet], { type: "application/javascript" }))); }
+  catch { stopTracks(); throw known("Ce navigateur est trop ancien pour la transcription en direct. Mettez-le à jour."); }
   const src = ctx.createMediaStreamSource(stream);
   const node = new AudioWorkletNode(ctx, "cap");
   const mute = ctx.createGain(); mute.gain.value = 0;
   src.connect(node); node.connect(mute); mute.connect(ctx.destination);
 
-  // Audio → PCM 16 bits, 16 kHz, mono, envoyé par paquets de 100 ms
   const ratio = ctx.sampleRate / 16000;
-  let buf = new Int16Array(1600), n = 0, pos = 0, ws = null, closing = false, tries = 0;
+  let buf = new Int16Array(1600), n = 0, pos = 0, ws = null, closing = false, tries = 0, peak = 0, lastMeter = 0;
+  const pending = []; // audio capté avant l'ouverture de la connexion
   const push = s => {
     const v = Math.max(-1, Math.min(1, s));
     buf[n++] = v < 0 ? v * 0x8000 : v * 0x7fff;
-    if (n === buf.length) { if (ws && ws.readyState === 1) ws.send(buf.buffer.slice(0)); n = 0; }
+    if (n === buf.length) {
+      const chunk = buf.buffer.slice(0); n = 0;
+      if (ws && ws.readyState === 1) ws.send(chunk); else if (pending.length < 100) pending.push(chunk);
+    }
   };
   node.port.onmessage = e => {
     const f = e.data;
+    for (let i = 0; i < f.length; i++) { const a = Math.abs(f[i]); if (a > peak) peak = a; }
     for (; pos < f.length; pos += ratio) push(f[Math.floor(pos)]);
     pos -= f.length;
+    const now = performance.now();
+    if (now - lastMeter > 80) { $("#meterBar").style.width = Math.min(100, Math.round(peak * 160)) + "%"; peak = 0; lastMeter = now; }
   };
 
   const uttWho = new Map();
   const open = () => {
     ws = new WebSocket(sess.url);
     ws.binaryType = "arraybuffer";
-    ws.onopen = () => { tries = 0; setRecUI(); };
+    ws.onopen = () => { tries = 0; while (pending.length) ws.send(pending.shift()); if (recording) setRecUI(); };
     ws.onmessage = ev => {
       let m; try { m = JSON.parse(ev.data); } catch { return; }
       if (m.type !== "transcript" || !m.data) return;
-      const id = m.data.id, text = (m.data.utterance && m.data.utterance.text || "").trim();
+      const id = m.data.id, text = ((m.data.utterance && m.data.utterance.text) || "").trim();
       if (!uttWho.has(id)) uttWho.set(id, speaker || "");
-      if (m.data.is_final) {
-        if (text) pushSeg(text, uttWho.get(id));
-        uttWho.delete(id); interimTxt = ""; $("#interim").textContent = "";
-      } else { interimTxt = text; $("#interim").textContent = text; }
+      if (m.data.is_final) { setInterim(""); if (text) pushSeg(text, uttWho.get(id)); uttWho.delete(id); }
+      else setInterim(text);
     };
     ws.onclose = ev => {
       if (closing || ev.code === 1000) return;
       if (recording && tries < 5) {
-        tries++; $("#recState").textContent = "Connexion à Gladia perdue, reconnexion…";
+        tries++; setRecUI("Connexion perdue, reconnexion…");
         setTimeout(() => { if (recording) open(); }, 1000 * tries);
-      } else if (recording) micBlocked("La connexion à Gladia s'est interrompue.");
+      } else if (recording) micBlocked("La connexion au service de transcription s'est interrompue.");
     };
   };
   open();
@@ -629,12 +688,10 @@ async function startGladia() {
     closing = true;
     try { if (ws.readyState === 1) ws.send(JSON.stringify({ type: "stop_recording" })); } catch {}
     try { node.port.onmessage = null; src.disconnect(); node.disconnect(); } catch {}
-    ctx.close().catch(() => {}); stopTracks();
+    ctx.close().catch(() => {}); stopTracks(); $("#meterBar").style.width = "0";
     setTimeout(() => { try { ws.close(1000); } catch {} }, 10000); // laisse arriver les dernières phrases
   };
 }
-
-
 
 /* ---------- 3 · Procès-verbal : rédaction ---------- */
 let sample = null, genCtl = null, view = "edit";
@@ -739,8 +796,6 @@ function renderPV() {
   if (!sample && !$("#genState").textContent) $("#genState").textContent = "La rédaction automatique s'active quand la page est ouverte dans Claude. En attendant, complétez le modèle à la main.";
   $("#pdfBtn").textContent = done ? "Télécharger le PDF" : "Télécharger le projet (PDF)";
   $("#pdfNote").textContent = done ? "" : "Tant qu'un paragraphe reste à valider, le PDF porte la mention « PROJET ».";
-  $("#pdfBtn").disabled = !window.jspdf;
-  if (!window.jspdf) $("#pdfNote").textContent = "Le moteur PDF n'a pas pu se charger. Rechargez la page.";
 
   const p = presenceLines();
   $("#viewEdit").replaceChildren(h("div", { class: "draft" },
@@ -777,25 +832,40 @@ function renderPV() {
 const clean = s => String(s).replace(/[’‘]/g, "'").replace(/[“”]/g, '"').replace(/[–—]/g, "-").replace(/…/g, "...")
   .replace(/\s*€/g, " euros").replace(/œ/g, "oe").replace(/Œ/g, "OE").replace(/[  ]/g, " ").replace(/[^\x00-\xFF]/g, "?");
 
+/* Moteur PDF intégré : polices standard Times (aucune bibliothèque externe, fonctionne hors ligne). */
+const TIMES_W = {normal:[250,333,408,500,500,833,778,180,333,333,500,564,250,333,250,278,500,500,500,500,500,500,500,500,500,500,278,278,564,564,564,444,921,722,667,667,722,611,556,722,722,333,389,722,611,889,722,722,556,722,667,556,611,722,722,944,722,722,611,333,278,333,469,500,333,444,500,444,500,444,333,500,500,278,278,500,278,778,500,500,500,500,333,389,278,500,500,722,500,500,444,480,200,480,541,350,500,350,333,500,444,1000,500,500,333,1000,556,333,889,350,611,350,350,333,333,444,444,350,500,1000,333,980,389,333,722,350,444,722,250,333,500,500,500,500,200,500,333,760,276,500,564,333,760,333,400,564,300,300,333,500,453,250,333,300,310,500,750,750,750,444,722,722,722,722,722,722,889,667,611,611,611,611,333,333,333,333,722,722,722,722,722,722,722,564,722,722,722,722,722,722,556,500,444,444,444,444,444,444,667,444,444,444,444,444,278,278,278,278,500,500,500,500,500,500,500,564,500,500,500,500,500,500,500,500],bold:[250,333,555,500,500,1000,833,278,333,333,500,570,250,333,250,278,500,500,500,500,500,500,500,500,500,500,333,333,570,570,570,500,930,722,667,722,722,667,611,778,778,389,500,778,667,944,722,778,611,778,722,556,667,722,722,1000,722,722,667,333,278,333,581,500,333,500,556,444,556,444,333,500,556,278,333,556,278,833,556,500,556,556,444,389,333,556,500,722,500,500,444,394,220,394,520,350,500,350,333,500,500,1000,500,500,333,1000,556,333,1000,350,667,350,350,333,333,500,500,350,500,1000,333,1000,389,333,722,350,444,722,250,333,500,500,500,500,220,500,333,747,300,500,570,333,747,333,400,570,300,300,333,556,540,250,333,300,330,500,750,750,750,500,722,722,722,722,722,722,1000,722,667,667,667,667,389,389,389,389,722,722,778,778,778,778,778,570,778,722,722,722,722,722,611,556,500,500,500,500,500,500,722,444,444,444,444,444,278,278,278,278,500,556,500,500,500,500,500,570,500,556,556,556,556,500,556,500],italic:[250,333,420,500,500,833,778,214,333,333,500,675,250,333,250,278,500,500,500,500,500,500,500,500,500,500,333,333,675,675,675,500,920,611,611,667,722,611,611,722,722,333,444,667,556,833,667,722,611,722,611,500,556,722,611,833,611,556,556,389,278,389,422,500,333,500,500,444,500,444,278,500,500,278,278,444,278,722,500,500,500,500,389,389,278,500,444,667,444,444,389,400,275,400,541,350,500,350,333,500,556,889,500,500,333,1000,500,333,944,350,556,350,350,333,333,556,556,350,500,889,333,980,389,333,667,350,389,556,250,389,500,500,500,500,275,500,333,760,276,500,675,333,760,333,400,675,300,300,333,500,523,250,333,300,310,500,750,750,750,500,611,611,611,611,611,611,889,667,611,611,611,611,333,333,333,333,722,667,722,722,722,722,722,675,722,722,722,722,722,556,611,500,500,500,500,500,500,500,667,444,444,444,444,444,278,278,278,278,500,500,500,500,500,500,500,675,500,500,500,500,500,444,500,444]};
+const MM = 72 / 25.4;
+const textW = (str, style, size) => { const W = TIMES_W[style] || TIMES_W.normal; let s = 0; for (const ch of str) { const c = ch.charCodeAt(0); s += c >= 32 && c < 256 ? W[c - 32] : 500; } return s / 1000 * size * 0.3528; };
+function wrapText(str, maxW, style, size) {
+  const out = []; let line = "";
+  for (const word of str.split(/ +/)) {
+    const tryL = line ? line + " " + word : word;
+    if (textW(tryL, style, size) <= maxW) { line = tryL; continue; }
+    if (line) out.push(line);
+    if (textW(word, style, size) <= maxW) { line = word; continue; }
+    line = ""; // mot plus long que la ligne : coupé au caractère
+    for (const ch of word) { if (textW(line + ch, style, size) > maxW) { out.push(line); line = ""; } line += ch; }
+  }
+  out.push(line);
+  return out;
+}
+
 function layout() {
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
   const s = S.seance, W = 210, H = 297, ML = 22, MR = 22, MT = 20, MB = 24, CW = W - ML - MR;
-  const done = S.pv.length && S.pv.every(p => p.status !== "todo");
+  const done = S.pv.length > 0 && S.pv.every(p => p.status !== "todo");
   const pages = [[]]; let y = MT;
   const P = () => pages[pages.length - 1];
-  const font = (st, sz) => { doc.setFont("times", st); doc.setFontSize(sz); };
   const LH = sz => sz * 0.3528 * 1.4;
   const need = hh => { if (y + hh > H - MB) { pages.push([]); y = MT + 4; } };
-  const text = (str, x, yy, o = {}) => P().push({ t: "text", s: str, x, y: yy, size: 11, style: "normal", align: "left", color: 20, ...o });
+  const text = (str, x, yy, o = {}) => P().push({ t: "text", s: clean(str), x, y: yy, size: 11, style: "normal", align: "left", color: 20, ...o });
   const para = (str, { size = 11, style = "normal", gap = 2.4, indent = 0, color } = {}) => {
-    font(style, size); const lh = LH(size);
-    doc.splitTextToSize(clean(str), CW - indent).forEach(l => { need(lh); y += lh; text(l, ML + indent, y, { size, style, color }); });
+    const lh = LH(size);
+    wrapText(clean(str), CW - indent, style, size).forEach(l => { need(lh); y += lh; text(l, ML + indent, y, { size, style, color }); });
     y += gap;
   };
 
   // En-tête administratif
-  [["DÉPARTEMENT DE " + (s.dept || "").toUpperCase(), "bold"], ["ARRONDISSEMENT DES " + (s.arr || "").replace(/^Les\s+/i, "").toUpperCase(), "normal"], ["COMMUNE DE " + (s.commune || "").toUpperCase(), "bold"]]
+  [["DÉPARTEMENT " + (/^[aeiouyéèh]/i.test(s.dept || "") ? "DE L'" : "DE ") + (s.dept || "").toUpperCase(), "bold"], ["ARRONDISSEMENT DES " + (s.arr || "").replace(/^Les\s+/i, "").toUpperCase(), "normal"], ["COMMUNE DE " + (s.commune || "").toUpperCase(), "bold"]]
     .forEach(([l, st], i) => text(clean(l), ML, MT + 4 + i * 4.6, { size: 9, style: st }));
   text("RÉPUBLIQUE FRANÇAISE", W - MR, MT + 4, { size: 9, style: "bold", align: "right" });
   text("Liberté · Égalité · Fraternité", W - MR, MT + 8.6, { size: 9, style: "italic", align: "right" });
@@ -850,28 +920,51 @@ function layout() {
   return { pages, done };
 }
 
-function toPDF(pages) {
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
-  doc.setProperties({ title: `Procès-verbal du conseil municipal de ${S.seance.commune} du ${shortDate(S.seance.date)}`, creator: "Séance PV" });
-  pages.forEach((pg, i) => {
-    if (i) doc.addPage();
+function buildPDF(pages) {
+  const FONT = { normal: "F1", bold: "F2", italic: "F3" };
+  const esc = t => t.replace(/[\\()]/g, "\\$&");
+  const f2 = v => (Math.round(v * 100) / 100).toString();
+  const gray = v => f2((v ?? 20) / 255);
+  const objs = [
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Times-Roman /Encoding /WinAnsiEncoding >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Times-Bold /Encoding /WinAnsiEncoding >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Times-Italic /Encoding /WinAnsiEncoding >>",
+    null // 4 : arbre des pages
+  ];
+  const kids = [];
+  pages.forEach(pg => {
+    const c = [];
     pg.forEach(o => {
       if (o.t === "wm") {
-        doc.setFont("times", "bold"); doc.setFontSize(96); doc.setTextColor(232);
-        const w = doc.getTextWidth("PROJET"), a = 35 * Math.PI / 180;
-        doc.text("PROJET", 105 - Math.cos(a) * w / 2, 160 + Math.sin(a) * w / 2, { angle: 35 });
+        const a = 35 * Math.PI / 180, cos = Math.cos(a), sin = Math.sin(a), w = textW("PROJET", "bold", 96) * MM, hh = 96 * 0.33;
+        const x = 105 * MM - cos * w / 2 + sin * hh, y = (297 - 160) * MM - sin * w / 2 - cos * hh;
+        c.push(`BT /F2 96 Tf ${gray(232)} g ${f2(cos)} ${f2(sin)} ${f2(-sin)} ${f2(cos)} ${f2(x)} ${f2(y)} Tm (PROJET) Tj ET`);
       } else if (o.t === "text") {
-        doc.setFont("times", o.style); doc.setFontSize(o.size); doc.setTextColor(o.color ?? 20);
-        doc.text(o.s, o.x, o.y, { align: o.align });
+        const w = textW(o.s, o.style, o.size);
+        const x = o.align === "center" ? o.x - w / 2 : o.align === "right" ? o.x - w : o.x;
+        c.push(`BT /${FONT[o.style] || "F1"} ${f2(o.size)} Tf ${gray(o.color)} g 1 0 0 1 ${f2(x * MM)} ${f2((297 - o.y) * MM)} Tm (${esc(o.s)}) Tj ET`);
       } else if (o.t === "line") {
-        doc.setDrawColor(o.color ?? 40); doc.setLineWidth(o.w ?? 0.3); doc.line(o.x1, o.y1, o.x2, o.y2);
+        c.push(`${f2((o.w ?? 0.3) * MM)} w ${gray(o.color ?? 40)} G ${f2(o.x1 * MM)} ${f2((297 - o.y1) * MM)} m ${f2(o.x2 * MM)} ${f2((297 - o.y2) * MM)} l S`);
       } else if (o.t === "rect") {
-        doc.setDrawColor(60); doc.setLineWidth(0.3); doc.rect(o.x, o.y, o.w, o.h);
+        c.push(`${f2(0.3 * MM)} w ${gray(60)} G ${f2(o.x * MM)} ${f2((297 - o.y - o.h) * MM)} ${f2(o.w * MM)} ${f2(o.h * MM)} re S`);
       }
     });
+    const stream = c.join("\n");
+    objs.push(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
+    objs.push(`<< /Type /Page /Parent 4 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 1 0 R /F2 2 0 R /F3 3 0 R >> >> /Contents ${objs.length} 0 R >>`);
+    kids.push(objs.length);
   });
-  return doc;
+  objs[3] = `<< /Type /Pages /Kids [${kids.map(k => k + " 0 R").join(" ")}] /Count ${kids.length} >>`;
+  objs.push("<< /Type /Catalog /Pages 4 0 R >>"); const root = objs.length;
+  objs.push(`<< /Title (${esc(clean(`Procès-verbal du conseil municipal de ${S.seance.commune} du ${shortDate(S.seance.date)}`))}) /Producer (Seance PV) >>`); const info = objs.length;
+  let out = "%PDF-1.4\n%\xE2\xE3\xCF\xD3\n"; const offs = [];
+  objs.forEach((o, i) => { offs.push(out.length); out += `${i + 1} 0 obj\n${o}\nendobj\n`; });
+  const xref = out.length;
+  out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n` + offs.map(o => String(o).padStart(10, "0") + " 00000 n \n").join("");
+  out += `trailer\n<< /Size ${objs.length + 1} /Root ${root} 0 R /Info ${info} 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  const bytes = new Uint8Array(out.length);
+  for (let i = 0; i < out.length; i++) bytes[i] = out.charCodeAt(i) & 255;
+  return new Blob([bytes], { type: "application/pdf" });
 }
 
 const SERIF = '"Times New Roman", Times, "Liberation Serif", "Nimbus Roman", serif';
@@ -901,7 +994,6 @@ let prevT;
 const schedulePreview = () => { clearTimeout(prevT); prevT = setTimeout(renderPreview, 150); };
 function renderPreview() {
   const box = $("#viewPrev");
-  if (!window.jspdf) { box.replaceChildren(h("div", { class: "empty" }, "Le moteur PDF n'a pas pu se charger. Rechargez la page.")); return; }
   const { pages } = layout();
   const canvases = pages.map((_, i) => h("canvas", { "aria-label": `Page ${i + 1} du procès-verbal` }));
   box.replaceChildren(...pages.flatMap((_, i) => [canvases[i], h("div", { class: "cap" }, `Page ${i + 1} / ${pages.length}`)]));
@@ -923,15 +1015,20 @@ let downloads;
 (async () => { try { downloads = await window.claude?.use?.("downloads"); } catch {} })();
 const fileName = () => `PV-CM-${clean(S.seance.commune || "commune").replace(/[^A-Za-z0-9À-ÿ-]+/g, "-")}-${S.seance.date}${layout().done ? "" : "-projet"}.pdf`;
 $("#pdfBtn").onclick = async () => {
-  if (!window.jspdf) return;
-  const doc = toPDF(layout().pages), name = fileName();
+  const blob = buildPDF(layout().pages), name = fileName();
   if (downloads) {
-    try { await downloads.save({ filename: name, data: doc.output("blob") }); toast("PDF enregistré."); }
+    try { await downloads.save({ filename: name, data: blob }); toast("PDF enregistré."); }
     catch (e) {
       if (e?.code === "declined") return;
       toast(e?.code === "extension_not_enabled" ? "Le téléchargement de PDF n'est pas disponible ici." : "Le téléchargement a échoué. Réessayez.");
     }
-  } else { try { doc.save(name); } catch { toast("Le téléchargement n'est pas disponible ici."); } }
+    return;
+  }
+  try {
+    const url = URL.createObjectURL(blob), a = h("a", { href: url, download: name });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch { toast("Le téléchargement n'est pas disponible ici."); }
 };
 const pvText = () => {
   const s = S.seance, p = presenceLines();

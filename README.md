@@ -47,3 +47,7 @@ Rien ne se règle dans l'appli : l'adresse du serveur est inscrite une fois pour
 
 - La clé Gladia ne quitte jamais le serveur. Le navigateur reçoit seulement un jeton temporaire, valable pour une session.
 - Le serveur n'accepte que les demandes venant de votre site (`ALLOWED_ORIGINS`). Par précaution, fixez aussi une limite de dépense dans votre compte Gladia.
+
+## Tests
+
+`python3 tests/e2e.py` lance les tests de bout en bout (Playwright, Chromium) : appel des élus, dictée en mode Chrome et en mode Safari iPhone simulés, erreurs de micro, transcription Gladia simulée, procès-verbal, aperçu et PDF.
