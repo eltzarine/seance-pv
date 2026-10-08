@@ -243,6 +243,10 @@ ol.odj{gap:10px}
         <div class="segs" id="segs"></div>
         <div class="interim" id="interim" aria-live="polite"></div>
       </div>
+      <div id="diagBox" hidden>
+        <div class="row"><button class="btn" id="diagMic" type="button">Tester le micro seul</button><span class="note" id="diagLevel"></span></div>
+        <pre id="diagLog" style="white-space:pre-wrap;font:12px/1.4 var(--f-mono);background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:8px;max-height:220px;overflow:auto;margin:8px 0 0"></pre>
+      </div>
     </div>
     <div class="card">
       <div style="display:grid;gap:8px">
@@ -502,6 +506,27 @@ const pushSeg = (text, who) => {
 $("#addSeg").onclick = () => { pushSeg($("#manual").value); $("#manual").value = ""; };
 
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const DIAG = /[?&]diag\b/.test(location.search);
+const t0 = performance.now();
+function diag(msg) {
+  if (!DIAG) return;
+  const l = $("#diagLog"); if (!l) return;
+  l.textContent += `${((performance.now() - t0) / 1000).toFixed(1)}s  ${msg}\n`; l.scrollTop = l.scrollHeight;
+}
+if (DIAG) {
+  $("#diagBox").hidden = false;
+  diag(`UA: ${navigator.userAgent}`);
+  diag(`SpeechRecognition: ${!!window.SpeechRecognition} · webkit: ${!!window.webkitSpeechRecognition} · https: ${window.isSecureContext} · getUserMedia: ${!!navigator.mediaDevices?.getUserMedia}`);
+  navigator.permissions?.query({ name: "microphone" }).then(r => diag("permission micro : " + r.state)).catch(() => diag("permission micro : non lisible"));
+  $("#diagMic").onclick = async () => {
+    try {
+      const st = await navigator.mediaDevices.getUserMedia({ audio: true }); diag("getUserMedia : OK");
+      const ac = new (window.AudioContext || window.webkitAudioContext)(); await ac.resume();
+      const an = ac.createAnalyser(); ac.createMediaStreamSource(st).connect(an); const d = new Uint8Array(an.fftSize);
+      let n = 0; const iv = setInterval(() => { an.getByteTimeDomainData(d); let m = 0; for (const v of d) m = Math.max(m, Math.abs(v - 128)); $("#diagLevel").textContent = "niveau " + m; if (++n > 50) { clearInterval(iv); st.getTracks().forEach(t => t.stop()); ac.close(); diag("test micro terminé"); } }, 100);
+    } catch (e) { diag("getUserMedia : ÉCHEC " + (e && (e.name + " " + e.message))); }
+  };
+}
 // Adresse du serveur de transcription (Cloudflare Worker). À renseigner une fois, à la mise en ligne.
 // Vide : l'appli utilise la reconnaissance vocale du navigateur.
 const TRANSCRIPTION_SERVER = "";
@@ -588,8 +613,11 @@ function startBrowser() {
     $("#micBanner").hidden = false; $("#micBanner").textContent = msg;
   };
   const watchdog = setTimeout(() => { if (alive && !heard) setRecUI("Le micro ne répond pas. Vérifiez qu'il est autorisé et qu'aucune autre appli ne l'utilise."); }, 6000);
-  rec.onstart = rec.onaudiostart = () => { heard = true; if (recording) setRecUI(); };
+  rec.onstart = () => { diag("onstart"); heard = true; if (recording) setRecUI(); };
+  rec.onaudiostart = () => { diag("onaudiostart"); heard = true; if (recording) setRecUI(); };
+  rec.onspeechstart = () => diag("onspeechstart");
   rec.onresult = e => {
+    diag(`onresult n=${e.results.length} final=${e.results[e.results.length - 1]?.isFinal}`);
     full = Array.from(e.results, r => r[0].transcript.trim()).filter(Boolean).join(" ");
     if (full.length < committed) committed = 0; // le moteur a repris à zéro
     const pending = full.slice(committed).trim();
@@ -600,6 +628,7 @@ function startBrowser() {
     else if (pending) silence = setTimeout(commit, QUIET);
   };
   rec.onerror = e => {
+    diag(`onerror ${e.error} ${e.message || ""} (heard=${heard})`);
     if (e.error === "no-speech" || e.error === "aborted") return;
     clearTimeout(watchdog);
     if (e.error === "not-allowed" && !heard) { alive = false; micBlocked(blockedHere()); }
@@ -609,14 +638,16 @@ function startBrowser() {
     else if (e.error === "network") setRecUI("Connexion au service de dictée perdue, nouvelle tentative…");
   };
   rec.onend = () => {
+    diag("onend");
     commit(); full = ""; committed = 0;
     if (!alive || !recording) return;
     if (++restarts > 50) { pauseForTap("La dictée s'est arrêtée. Touchez le bouton rouge pour reprendre."); return; }
     setTimeout(() => {
       if (!alive || !recording) return;
-      try { rec.start(); } catch { pauseForTap("Le navigateur a mis la dictée en pause. Touchez le bouton rouge pour reprendre."); }
+      try { diag("restart"); rec.start(); } catch (err) { diag("restart ÉCHEC " + err); pauseForTap("Le navigateur a mis la dictée en pause. Touchez le bouton rouge pour reprendre."); }
     }, 300);
   };
+  diag("start");
   rec.start(); // dans le toucher : indispensable sur Safari
   browserCommit = commit;
   return () => { alive = false; browserCommit = null; clearTimeout(silence); clearTimeout(watchdog); commit(); try { rec.onend = null; rec.stop(); } catch {} };
