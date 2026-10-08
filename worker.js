@@ -4,9 +4,11 @@
 //   GLADIA_API_KEY   (secret)  clé API Gladia
 //   ALLOWED_ORIGINS  (texte)   adresse(s) du site autorisé, séparées par des virgules,
 //                              ex. https://eltzarine.github.io
-// Rédaction du procès-verbal (une des deux clés suffit) :
-//   ANTHROPIC_API_KEY (secret) clé de l'API Claude (console.anthropic.com)   — modèle : ANTHROPIC_MODEL (facultatif)
-//   MISTRAL_API_KEY   (secret) clé de l'API Mistral (console.mistral.ai)     — modèle : MISTRAL_MODEL (facultatif)
+// Rédaction du procès-verbal (un seul de ces moyens suffit, essayés dans cet ordre) :
+//   ANTHROPIC_API_KEY (secret) clé de l'API Claude (platform.claude.com)  — modèle : ANTHROPIC_MODEL (facultatif)
+//   MISTRAL_API_KEY   (secret) clé de l'API Mistral (console.mistral.ai)  — modèle : MISTRAL_MODEL (facultatif)
+//   AI                (liaison Workers AI, gratuite : Settings → Bindings → Workers AI, nom « AI »)
+//                              — modèle : WORKERS_AI_MODEL (facultatif)
 
 const GLADIA_LIVE = "https://api.gladia.io/v2/live";
 // Limites par adresse IP (mémoire de l'instance : un garde-fou, pas un quota exact).
@@ -52,6 +54,18 @@ async function llm(env, prompt, maxTokens) {
     const d = await r.json().catch(() => ({}));
     if (!r.ok) return { error: "ia", fournisseur: "mistral", status: r.status };
     return { text: d.choices?.[0]?.message?.content || "" };
+  }
+  if (env.AI && typeof env.AI.run === "function") {
+    try {
+      const d = await env.AI.run(env.WORKERS_AI_MODEL || "@cf/mistralai/mistral-small-3.1-24b-instruct", {
+        messages: [{ role: "system", content: RULES }, { role: "user", content: prompt }], max_tokens: maxTokens, temperature: 0.2,
+      });
+      const text = typeof d === "string" ? d : d?.response ?? d?.choices?.[0]?.message?.content ?? d?.result?.response ?? "";
+      return { text: typeof text === "string" ? text : JSON.stringify(text) };
+    } catch (e) {
+      const m = String(e && e.message || e);
+      return { error: /4006|neurons|daily|quota|limit/i.test(m) ? "quota_ia" : "ia", fournisseur: "workers-ai" };
+    }
   }
   return { error: "cle_ia_absente" };
 }
@@ -101,7 +115,7 @@ export default {
 
       if (request.method === "GET" && pathname === "/health") {
         // Diagnostic sans secret : indique seulement si la configuration est complète.
-        return json({ ok: true, gladia: Boolean(env.GLADIA_API_KEY), redaction: Boolean(env.ANTHROPIC_API_KEY || env.MISTRAL_API_KEY), origines: allowed.length, origine_autorisee: originOk });
+        return json({ ok: true, gladia: Boolean(env.GLADIA_API_KEY), redaction: Boolean(env.ANTHROPIC_API_KEY || env.MISTRAL_API_KEY || env.AI), origines: allowed.length, origine_autorisee: originOk });
       }
 
       if (!originOk) return json({ error: "origine_refusee", origine: origin || null }, 403);
@@ -129,7 +143,7 @@ export default {
       }
 
       if (request.method === "POST" && pathname === "/redaction") {
-        if (!env.ANTHROPIC_API_KEY && !env.MISTRAL_API_KEY) return json({ error: "cle_ia_absente" }, 500);
+        if (!env.ANTHROPIC_API_KEY && !env.MISTRAL_API_KEY && !env.AI) return json({ error: "cle_ia_absente" }, 500);
         if (Number(request.headers.get("Content-Length") || 0) > 600000) return json({ error: "trop_long" }, 413);
         if (tooMany("redaction", request.headers.get("CF-Connecting-IP") || "inconnue")) return json({ error: "trop_de_demandes" }, 429);
         const body = await request.json().catch(() => null);

@@ -74,3 +74,22 @@ await t("autre site refusé", async () => {
   assert.equal(r.status, 403);
 });
 console.log(`\n${n} tests serveur réussis au total`);
+
+console.log("\nWorkers AI (gratuit)");
+await t("liaison Workers AI utilisée sans clé, modèle Mistral par défaut", async () => {
+  let used;
+  const AI = { run: async (model, input) => { used = { model, input }; return { response: "[{\"titre\":\"Ouverture de la séance\",\"texte\":\"z\"}]" }; } };
+  const r = await redac({ ...env, AI }, payload, "7.7.8.1");
+  assert.equal(r.status, 200); assert.equal(r.body.sections[0].texte, "z");
+  assert.equal(used.model, "@cf/mistralai/mistral-small-3.1-24b-instruct"); assert.equal(used.input.messages[0].role, "system");
+});
+await t("quota gratuit épuisé signalé", async () => {
+  const AI = { run: async () => { throw new Error("4006: you have used up your daily free allocation of 10,000 neurons"); } };
+  assert.equal((await redac({ ...env, AI }, payload, "7.7.8.2")).body.error, "quota_ia");
+});
+await t("une clé payante, si présente, passe avant Workers AI", async () => {
+  let aiUsed = false; const AI = { run: async () => { aiUsed = true; return { response: "[]" }; } };
+  gladia = async () => ({ ok: true, json: async () => ({ content: [{ type: "text", text: "[{\"titre\":\"A\",\"texte\":\"b\"}]" }] }) });
+  await redac({ ...env, AI, ANTHROPIC_API_KEY: "ak" }, payload, "7.7.8.3"); assert.equal(aiUsed, false);
+});
+console.log(`\n${n} tests serveur réussis au total`);

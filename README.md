@@ -25,12 +25,13 @@ Comptez 20 minutes, depuis un ordinateur.
 
 ## 2 bis. Rédaction automatique du procès-verbal
 
-Au clic sur « Passer au procès-verbal », le serveur fait rédiger le PV par une IA à partir de la transcription. Ajoutez sur le worker **une** de ces deux clés (type Secret), puis cliquez sur **Deploy** :
+Au clic sur « Passer au procès-verbal », le serveur fait rédiger le PV par une IA à partir de la transcription. Un seul de ces moyens suffit :
 
-- `ANTHROPIC_API_KEY` : clé de l'API Claude, créée sur console.anthropic.com (modèle par défaut : `claude-sonnet-5-5`, modifiable avec la variable `ANTHROPIC_MODEL`).
-- `MISTRAL_API_KEY` : clé de l'API Mistral, créée sur console.mistral.ai (modèle par défaut : `mistral-large-latest`, modifiable avec `MISTRAL_MODEL`). Les données restent chez un hébergeur français.
+- **Gratuit, sans clé : Workers AI de Cloudflare.** Sur le worker, ouvrez **Settings › Bindings › Add binding › Workers AI**, nommez la liaison `AI`, puis cliquez sur **Deploy**. Le quota gratuit (10 000 « neurones » par jour) couvre environ 8 PV de séances de 2 h par jour. Modèle par défaut : `@cf/mistralai/mistral-small-3.1-24b-instruct`, modifiable avec la variable `WORKERS_AI_MODEL`.
+- `ANTHROPIC_API_KEY` (Secret) : clé de l'API Claude (platform.claude.com), environ 0,10 $ par PV. Modèle : `claude-sonnet-5-5` (variable `ANTHROPIC_MODEL`).
+- `MISTRAL_API_KEY` (Secret) : clé de l'API Mistral (console.mistral.ai). Modèle : `mistral-large-latest` (variable `MISTRAL_MODEL`).
 
-Sans clé, l'appli préremplit le modèle de PV avec les interventions de chaque point, à reformuler à la main.
+Si plusieurs sont configurés, la clé Claude passe en premier, puis Mistral, puis Workers AI. Sans aucun, l'appli préremplit le modèle de PV avec les interventions de chaque point.
 
 ## 3. Appli sur GitHub Pages (index.html)
 
