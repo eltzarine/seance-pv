@@ -39,7 +39,7 @@ const GAILLON = () => {
         "Questions diverses"
       ]
     },
-    elapsed: 0, segments: [], pv: []
+    elapsed: 0, segments: [], pv: [], pvSegs: 0
   };
   S.pv = skeleton(S);
   return S;
@@ -90,6 +90,7 @@ function sanitize(d) {
       president: str(se.president, 120), secretaire: str(se.secretaire, 120), elus, odj
     },
     elapsed: Math.max(0, Math.min(86400 * 2, parseInt(d.elapsed, 10) || 0)),
+    pvSegs: Math.max(0, parseInt(d.pvSegs, 10) || 0),
     segments: arr(d.segments, 20000).filter(x => x && typeof x === "object" && typeof x.text === "string").map(x => ({
       id: str(x.id, 40) || newId(), pt: Math.max(0, Math.min(odj.length, parseInt(x.pt, 10) || 0)),
       t: /^\d{2}:\d{2}:\d{2}$/.test(x.t) ? x.t : "00:00:00", who: str(x.who, 120), text: str(x.text, 5000)
@@ -116,7 +117,7 @@ function go(n) {
   document.querySelectorAll(".step").forEach(b => b.setAttribute("aria-current", String(+b.dataset.step === n)));
   [0, 1, 2].forEach(i => $("#p" + i).hidden = i !== n);
   if (n === 0) requestAnimationFrame(() => document.querySelectorAll("textarea.grow").forEach(grow));
-  if (n === 1) renderRec(); if (n === 2) renderPV();
+  if (n === 1) renderRec(); if (n === 2) { renderPV(); autoDraft(); }
   window.scrollTo({ top: 0 });
 }
 document.querySelectorAll(".step").forEach(b => b.onclick = () => go(+b.dataset.step));
@@ -505,8 +506,8 @@ async function startGladia(ctx) {
 }
 
 /* ---------- 3 · Procès-verbal : rédaction ---------- */
-let sample = null, genCtl = null, view = "edit";
-(async () => { try { sample = await window.claude?.use?.("sample"); } catch {} renderPV(); })();
+let sample = null, sampleReady = false, genCtl = null, view = "edit";
+(async () => { try { sample = await window.claude?.use?.("sample"); } catch {} sampleReady = true; renderPV(); if (S.step === 2) autoDraft(); })();
 
 const presenceLines = () => {
   const s = S.seance, c = counts();
@@ -536,13 +537,11 @@ Règles strictes :
 - Ne rédige PAS la liste des présents, pouvoirs et absents : elle est ajoutée automatiquement.
 - Sections dans cet ordre : « Ouverture de la séance », une section par point de l'ordre du jour intitulée « Point N – <intitulé> », « Clôture » (heure de levée).`;
 
-async function generate() {
-  if (!sample) return;
-  if (!S.segments.length) { $("#genState").textContent = "La transcription est vide : enregistrez la séance ou ajoutez des interventions à l'étape 2."; return; }
-  genCtl = new AbortController();
-  $("#genBtn").disabled = true; $("#stopGen").hidden = false;
-  $("#genState").textContent = "Rédaction du procès-verbal… (de 30 secondes à 2 minutes)";
-  try {
+// Dans Claude, la rédaction passe par Claude (le serveur n'y est pas joignable) ; en ligne, par le serveur.
+const canDraft = () => !!sample || (!IN_CLAUDE && !!serverBase());
+// Rédaction : dans Claude, par l'IA de l'utilisateur ; en ligne, par le serveur (clé IA côté serveur).
+async function draftAll(signal) {
+  if (sample) {
     const out = await sample.json(`${RULES}
 
 Réponds uniquement par un tableau JSON de sections : [{"titre": string, "texte": string}], les paragraphes d'une section séparés par une ligne vide dans "texte".
@@ -551,30 +550,15 @@ INFORMATIONS DE SÉANCE
 ${seanceText()}
 
 TRANSCRIPTION HORODATÉE
-${transcriptText()}`, { signal: genCtl.signal, cache: false });
-    if (!Array.isArray(out) || !out.length) throw { code: "invalid_json" };
-    S.pv = out.filter(x => x && x.titre).map((x, i) => ({ id: "g" + Date.now() + i, titre: String(x.titre), texte: String(x.texte || ""), status: "todo" }));
-    save();
-    $("#genState").textContent = "Projet rédigé. Relisez et validez chaque paragraphe.";
-  } catch (e) {
-    $("#genState").textContent = errCopy(e.code);
-  } finally { $("#genBtn").disabled = false; $("#stopGen").hidden = true; genCtl = null; renderPV(); }
+${transcriptText()}`, { signal, cache: false });
+    if (!Array.isArray(out)) throw { code: "invalid_json" };
+    return out;
+  }
+  const b = await serverDraft({ seance: seanceText(), transcription: transcriptText() }, signal);
+  return b.sections;
 }
-$("#stopGen").onclick = () => genCtl?.abort();
-$("#genBtn").onclick = () => S.pv.some(p => p.status !== "todo") ? ask("Rédiger avec Claude remplace le PV actuel et vos validations. Continuer ?", generate) : generate();
-const errCopy = c => ({
-  cancelled: "Rédaction arrêtée.",
-  not_granted: "L'accès à Claude n'a pas été autorisé pour cette page.",
-  rate_limited: "Trop de demandes pour le moment. Réessayez dans quelques minutes.",
-  invalid_json: "La réponse n'était pas exploitable. Relancez la rédaction.",
-  prompt_too_large: "La transcription est trop longue pour une seule rédaction.",
-  session_expired: "Votre session a expiré : reconnectez-vous à Claude."
-}[c] || "La rédaction a échoué. Relancez-la.");
-
-async function regenOne(p, btn) {
-  if (!sample) return;
-  btn.disabled = true; btn.textContent = "Réécriture…";
-  try {
+async function draftOne(p) {
+  if (sample) {
     const { text } = await sample(`${RULES}
 
 Réécris uniquement la section « ${p.titre} » du procès-verbal, plus fidèle à la transcription. Réponds par le seul texte de la section, sans titre.
@@ -587,8 +571,69 @@ ${seanceText()}
 
 TRANSCRIPTION
 ${transcriptText()}`, { cache: false });
-    p.texte = text.trim(); p.status = "todo"; save();
-  } catch (e) { toast(errCopy(e.code)); }
+    return text;
+  }
+  return (await serverDraft({ seance: seanceText(), transcription: transcriptText(), section: { titre: p.titre, texte: p.texte } })).texte || "";
+}
+async function serverDraft(payload, signal) {
+  let r;
+  try { r = await fetch(serverBase() + "/redaction", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload), signal }); }
+  catch (e) { throw { code: e && e.name === "AbortError" ? "cancelled" : "network" }; }
+  const b = await r.json().catch(() => ({}));
+  if (!r.ok) throw { code: b.error || "upstream_error", status: b.status };
+  return b;
+}
+
+async function generate() {
+  if (!canDraft()) return;
+  if (!S.segments.length) { $("#genState").textContent = "La transcription est vide : enregistrez la séance ou ajoutez des interventions à l'étape 2."; return; }
+  genCtl = new AbortController();
+  $("#genBtn").disabled = true; $("#stopGen").hidden = false;
+  $("#genState").textContent = "Rédaction du procès-verbal à partir de la transcription… (de 30 secondes à 2 minutes)";
+  try {
+    const out = await draftAll(genCtl.signal);
+    const secs = out.filter(x => x && x.titre).map((x, i) => ({ id: "g" + Date.now() + i, titre: String(x.titre), texte: String(x.texte || ""), status: "todo" }));
+    if (!secs.length) throw { code: "invalid_json" };
+    S.pv = secs; S.pvSegs = S.segments.length; save();
+    $("#genState").textContent = "Projet rédigé. Relisez et validez chaque paragraphe.";
+  } catch (e) {
+    $("#genState").textContent = errCopy(e.code);
+  } finally { $("#genBtn").disabled = false; $("#stopGen").hidden = true; genCtl = null; renderPV(); }
+}
+// À l'arrivée sur le procès-verbal : rédaction automatique si la transcription a changé et que rien n'est encore validé.
+function autoDraft() {
+  if (IN_CLAUDE && !sampleReady) return; // on attend de savoir si Claude peut rédiger
+  if (!S.segments.length || S.pvSegs === S.segments.length || genCtl) return;
+  if (S.pv.some(p => p.status !== "todo")) {
+    $("#genState").textContent = "La transcription a évolué depuis la rédaction. Touchez « Rédiger à nouveau » pour mettre le PV à jour (vos validations seront remplacées).";
+    return;
+  }
+  if (canDraft()) generate();
+  else { S.pv = skeleton(S); S.pvSegs = S.segments.length; save(); renderPV(); $("#genState").textContent = "Modèle prérempli avec les interventions de chaque point, à reformuler."; }
+}
+$("#stopGen").onclick = () => genCtl?.abort();
+$("#genBtn").onclick = () => S.pv.some(p => p.status !== "todo") ? ask("Une nouvelle rédaction remplace le PV actuel et vos validations. Continuer ?", generate) : generate();
+const errCopy = c => ({
+  cancelled: "Rédaction arrêtée.",
+  not_granted: "L'accès à Claude n'a pas été autorisé pour cette page.",
+  rate_limited: "Trop de demandes pour le moment. Réessayez dans quelques minutes.",
+  invalid_json: "La réponse n'était pas exploitable. Relancez la rédaction.",
+  prompt_too_large: "La transcription est trop longue pour une seule rédaction.",
+  session_expired: "Votre session a expiré : reconnectez-vous à Claude.",
+  network: "Serveur de rédaction injoignable. Vérifiez la connexion internet.",
+  cle_ia_absente: "La rédaction automatique n'est pas encore configurée sur le serveur (clé ANTHROPIC_API_KEY ou MISTRAL_API_KEY).",
+  ia: "Le service d'IA a refusé la demande. Vérifiez la clé configurée sur le serveur.",
+  trop_de_demandes: "Trop de rédactions en peu de temps. Patientez quelques minutes.",
+  reponse_illisible: "La réponse n'était pas exploitable. Relancez la rédaction.",
+  trop_long: "La transcription est trop longue pour une seule rédaction.",
+  origine_refusee: "Ce site n'est pas autorisé par le serveur."
+}[c] || "La rédaction a échoué. Relancez-la.");
+
+async function regenOne(p, btn) {
+  if (!canDraft()) return;
+  btn.disabled = true; btn.textContent = "Réécriture…";
+  try { const t = (await draftOne(p)).trim(); if (t) { p.texte = t; p.status = "todo"; save(); } }
+  catch (e) { toast(errCopy(e.code)); }
   renderPV();
 }
 
@@ -603,8 +648,9 @@ function renderPV() {
   $("#pvTitle").textContent = n ? `Procès-verbal · ${ok}/${n} paragraphes validés` : "Procès-verbal";
   $("#pvProgressTxt").textContent = done ? "Tout est validé : le PV est prêt à être signé." : "Validez, corrigez ou faites réécrire chaque paragraphe.";
   $("#pvBar").style.width = n ? (ok / n * 100) + "%" : "0";
-  $("#genBtn").hidden = !sample;
-  if (!sample && !$("#genState").textContent) $("#genState").textContent = "La rédaction automatique s'active quand la page est ouverte dans Claude. En attendant, complétez le modèle à la main.";
+  $("#genBtn").hidden = !canDraft();
+  $("#genBtn").textContent = S.pvSegs ? "Rédiger à nouveau" : "Rédiger le PV";
+  if (!canDraft() && !$("#genState").textContent) $("#genState").textContent = "Complétez le modèle à la main : la rédaction automatique n'est pas disponible ici.";
   $("#pdfBtn").textContent = done ? "Télécharger le PDF" : "Télécharger le projet (PDF)";
   $("#pdfNote").textContent = done ? "" : "Tant qu'un paragraphe reste à valider, le PDF porte la mention « PROJET ».";
 
@@ -630,7 +676,7 @@ function renderPV() {
               ? h("button", { class: "btn ok", type: "button", disabled: hasTodo, onclick: () => { p.status = "ok"; save(); renderPV(); } }, "✓ Valider")
               : h("button", { class: "btn ghost", type: "button", onclick: () => { p.status = "todo"; save(); renderPV(); } }, "Rouvrir"),
             h("button", { class: "btn", type: "button", onclick: () => { editing.add(p.id); renderPV(); } }, "Modifier"),
-            sample && S.segments.length ? h("button", { class: "btn ghost", type: "button", onclick: e => regenOne(p, e.currentTarget) }, "Réécrire") : null
+            canDraft() && S.segments.length ? h("button", { class: "btn ghost", type: "button", onclick: e => regenOne(p, e.currentTarget) }, "Réécrire") : null
           ]),
         hasTodo && !isEd ? h("div", { class: "note", style: "margin-top:6px" }, "Complétez les mentions surlignées (bouton Modifier) avant de valider.") : null
       );

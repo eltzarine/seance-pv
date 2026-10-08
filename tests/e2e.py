@@ -269,6 +269,58 @@ def main():
         check("aucune erreur JavaScript (Gladia)", lambda: (_ for _ in ()).throw(AssertionError("; ".join(errors))) if errors else None)
         ctx.close()
 
+        print("Étape 3 · rédaction au passage au procès-verbal")
+        ctx, page, errors = new_page(browser, sr_mode="chrome")
+        go_rec(page)
+        def t_skel():
+            page.locator("#recBtn").click()
+            expect(page.locator("#segs .seg")).to_have_count(1, timeout=4000)
+            page.locator("#recBtn").click()
+            page.get_by_role("button", name="Passer au procès-verbal →").click()
+            expect(page.locator("#viewEdit")).to_contain_text("Je déclare la séance ouverte", timeout=3000)
+            expect(page.locator("#genState")).to_contain_text("prérempli")
+        check("sans IA : le modèle se remplit avec les interventions de chaque point", t_skel)
+        ctx.close()
+
+        seance = {"step": 1, "seance": {"commune": "Gaillon", "dept": "Eure", "arr": "Les Andelys", "date": "2026-10-13", "heure": "18:30", "convoc": "2026-10-06",
+                  "lieu": "salle du conseil", "exercice": 29, "president": "Odile HANTZ", "secretaire": "Karine HOUCHARD",
+                  "elus": [{"nom": "Odile HANTZ", "statut": "present"}, {"nom": "Karine HOUCHARD", "statut": "present"}], "odj": ["Budget", "Questions diverses"]},
+                  "elapsed": 120, "segments": [{"id": "a", "pt": 0, "t": "00:01:00", "who": "Odile HANTZ", "text": "Le budget est adopté à l'unanimité."}],
+                  "pv": [], "pvSegs": 0}
+        calls = []
+        def on_redac(route):
+            body = json.loads(route.request.post_data); calls.append(body)
+            if body.get("section"):
+                return route.fulfill(status=200, content_type="application/json", headers={"Access-Control-Allow-Origin": "*"}, body=json.dumps({"texte": "Texte réécrit."}))
+            return route.fulfill(status=200, content_type="application/json", headers={"Access-Control-Allow-Origin": "*"}, body=json.dumps({"sections": [
+                {"titre": "Ouverture de la séance", "texte": "La séance est ouverte à 18 h 30."},
+                {"titre": "Point 1 – Budget", "texte": "Vote : 2 voix pour, 0 contre, 0 abstention."},
+                {"titre": "Clôture", "texte": "La séance est levée à 19 h."}]}))
+        def setup_redac(page):
+            page.route("https://worker.test/redaction", on_redac)
+            page.add_init_script("localStorage.setItem('seance-pv-gaillon-v2', " + json.dumps(json.dumps(seance)) + ")")
+        ctx = browser.new_context(**iphone, bypass_csp=True)
+        page = ctx.new_page(); errors = []
+        page.on("pageerror", lambda e: errors.append(str(e)))
+        page.route("https://fonts.googleapis.com/**", lambda r: r.fulfill(status=200, content_type="text/css", body=""))
+        page.add_init_script("window.SEANCE_PV_SERVER='https://worker.test';")
+        setup_redac(page)
+        page.goto(URL)
+        def t_ai():
+            page.get_by_role("button", name="Passer au procès-verbal →").tap()
+            expect(page.locator(".para")).to_have_count(3, timeout=5000)
+            expect(page.locator(".para h4").nth(1)).to_have_text("Point 1 – Budget")
+            expect(page.locator("#genState")).to_contain_text("Projet rédigé")
+            assert len(calls) == 1 and "Le budget est adopté" in calls[0]["transcription"] and "Odile HANTZ" in calls[0]["seance"]
+            assert set(calls[0]) == {"seance", "transcription"}, calls[0].keys()
+            page.locator('.step[data-step="1"]').click(); page.locator('.step[data-step="2"]').click()
+            assert len(calls) == 1, "nouvelle rédaction alors que rien n'a changé"
+            page.locator(".para").first.get_by_role("button", name="Réécrire").tap()
+            expect(page.locator(".para .txt").first).to_have_text("Texte réécrit.")
+        check("avec le serveur : PV rédigé automatiquement au clic, une seule fois, réécriture d'un paragraphe", t_ai)
+        check("aucune erreur JavaScript (rédaction)", lambda: (_ for _ in ()).throw(AssertionError("; ".join(errors))) if errors else None)
+        ctx.close()
+
         print("Étape 3 · procès-verbal, aperçu et PDF")
         ctx, page, errors = new_page(browser, iphone)
         page.locator(".step[data-step=\"2\"]").click()

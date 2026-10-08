@@ -23,6 +23,15 @@ Comptez 20 minutes, depuis un ordinateur.
    L'appli attend le worker à l'adresse `https://seance-pv.cesar-poirrier.workers.dev` : gardez le nom `seance-pv`.
 5. Notez l'adresse du worker, par exemple `https://seance-pv.xxxx.workers.dev`.
 
+## 2 bis. Rédaction automatique du procès-verbal
+
+Au clic sur « Passer au procès-verbal », le serveur fait rédiger le PV par une IA à partir de la transcription. Ajoutez sur le worker **une** de ces deux clés (type Secret), puis cliquez sur **Deploy** :
+
+- `ANTHROPIC_API_KEY` : clé de l'API Claude, créée sur console.anthropic.com (modèle par défaut : `claude-sonnet-5-5`, modifiable avec la variable `ANTHROPIC_MODEL`).
+- `MISTRAL_API_KEY` : clé de l'API Mistral, créée sur console.mistral.ai (modèle par défaut : `mistral-large-latest`, modifiable avec `MISTRAL_MODEL`). Les données restent chez un hébergeur français.
+
+Sans clé, l'appli préremplit le modèle de PV avec les interventions de chaque point, à reformuler à la main.
+
 ## 3. Appli sur GitHub Pages (index.html)
 
 1. Créez un dépôt GitHub `seance-pv` et déposez-y `index.html`.
