@@ -513,8 +513,10 @@ const IS_IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform
 let recording = false, starting = false, tick = null, wake = null, interimTxt = "", engineStop = null, engineName = null;
 const scrollLive = () => { const b = $("#livebox"); if (b) b.scrollTop = b.scrollHeight; };
 const setInterim = t => { interimTxt = t; $("#interim").textContent = t; scrollLive(); };
+let browserCommit = null;
 function flushInterim() {
   if (engineName === "gladia") return; // Gladia attribue chaque phrase à l'orateur actif à son début
+  if (browserCommit) { browserCommit(); return; }
   if (interimTxt.trim()) { const t = interimTxt; setInterim(""); pushSeg(t); }
 }
 function showProblem(msg) { $("#micBanner").hidden = false; $("#micBanner").textContent = msg; }
@@ -566,47 +568,58 @@ function stopRec() {
 }
 $("#recBtn").onclick = () => recording ? stopRec() : startRec();
 
-/* Reconnaissance du navigateur (Chrome, Edge, Safari).
-   Safari sur iPhone ne marque presque jamais les phrases comme terminées et s'arrête au moindre silence :
-   on valide donc la phrase après 1,5 s sans nouveau mot, puis on relance l'écoute. */
+/* Reconnaissance du navigateur (Chrome, Edge, Safari). */
 function startBrowser() {
   if (!SR) throw known(IS_IOS ? "La reconnaissance vocale n'est pas disponible dans ce navigateur. Utilisez Safari." : "La reconnaissance vocale n'est pas disponible dans ce navigateur. Utilisez Chrome, Edge ou Safari.");
-  let rec = null, alive = true, silence = null, fails = 0, gotAudio = false;
-  const watchdog = setTimeout(() => { if (alive && !gotAudio) setRecUI("Le micro ne répond pas. Vérifiez qu'il est autorisé et qu'aucune autre appli ne l'utilise."); }, 5000);
-  const make = () => {
-    rec = new SR();
-    rec.lang = "fr-FR"; rec.continuous = !IS_IOS; rec.interimResults = true; rec.maxAlternatives = 1;
-    rec.onaudiostart = () => { gotAudio = true; fails = 0; if (recording) setRecUI(); };
-    rec.onresult = e => {
-      let fin = "", interim = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const r = e.results[i];
-        (r.isFinal ? (fin += r[0].transcript + " ") : (interim += r[0].transcript));
-      }
-      if (fin.trim()) { setInterim(""); pushSeg(fin); }
-      setInterim(interim);
-      clearTimeout(silence);
-      if (interim.trim()) silence = setTimeout(() => { try { rec.stop(); } catch {} }, 1500);
-    };
-    rec.onerror = e => {
-      if (e.error === "no-speech" || e.error === "aborted") return; // silence : on relance simplement
-      if (e.error === "not-allowed") { alive = false; micBlocked(blockedHere()); }
-      else if (e.error === "service-not-allowed") { alive = false; micBlocked(IS_IOS ? "La dictée d'Apple est désactivée. Activez-la : Réglages › Général › Clavier › Activer Dictée, puis réessayez." : blockedHere()); }
-      else if (e.error === "audio-capture") { alive = false; micBlocked("Aucun micro n'a été trouvé sur cet appareil."); }
-      else if (e.error === "network") { fails++; setRecUI("Connexion au service de dictée perdue, nouvelle tentative…"); }
-      else fails++;
-    };
-    rec.onend = () => {
-      clearTimeout(silence);
-      flushInterim();
-      if (!alive || !recording) return;
-      if (fails > 5) { alive = false; micBlocked("La dictée s'est arrêtée plusieurs fois."); return; }
-      setTimeout(() => { if (alive && recording) { try { make(); rec.start(); } catch { fails++; } } }, 250);
-    };
+  // Une seule session d'écoute, relancée sur le même objet : Safari refuse souvent une nouvelle écoute créée hors d'un toucher.
+  // Le texte s'accumule : on valide la partie nouvelle après un silence, sans arrêter l'écoute.
+  const rec = new SR();
+  rec.lang = "fr-FR"; rec.continuous = true; rec.interimResults = true; rec.maxAlternatives = 1;
+  let alive = true, heard = false, full = "", committed = 0, silence = null, restarts = 0;
+  const QUIET = IS_IOS ? 1500 : 2500;
+  const commit = () => {
+    clearTimeout(silence);
+    const t = full.slice(committed).trim();
+    committed = full.length; setInterim("");
+    if (t) pushSeg(t);
   };
-  make();
-  rec.start(); // dans le geste : indispensable sur Safari
-  return () => { alive = false; clearTimeout(silence); clearTimeout(watchdog); try { rec.onend = null; rec.stop(); } catch {} };
+  const pauseForTap = msg => {
+    alive = false; stopRec();
+    $("#micBanner").hidden = false; $("#micBanner").textContent = msg;
+  };
+  const watchdog = setTimeout(() => { if (alive && !heard) setRecUI("Le micro ne répond pas. Vérifiez qu'il est autorisé et qu'aucune autre appli ne l'utilise."); }, 6000);
+  rec.onstart = rec.onaudiostart = () => { heard = true; if (recording) setRecUI(); };
+  rec.onresult = e => {
+    full = Array.from(e.results, r => r[0].transcript.trim()).filter(Boolean).join(" ");
+    if (full.length < committed) committed = 0; // le moteur a repris à zéro
+    const pending = full.slice(committed).trim();
+    setInterim(pending);
+    clearTimeout(silence);
+    const last = e.results[e.results.length - 1];
+    if (last && last.isFinal) commit();
+    else if (pending) silence = setTimeout(commit, QUIET);
+  };
+  rec.onerror = e => {
+    if (e.error === "no-speech" || e.error === "aborted") return;
+    clearTimeout(watchdog);
+    if (e.error === "not-allowed" && !heard) { alive = false; micBlocked(blockedHere()); }
+    else if (e.error === "service-not-allowed" && !heard) { alive = false; micBlocked(IS_IOS ? "Safari ne peut pas utiliser la dictée. Vérifiez que Siri est activé (Réglages › Siri) en plus de la Dictée, autorisez le micro pour Safari, puis réessayez." : blockedHere()); }
+    else if (e.error === "audio-capture") { alive = false; micBlocked("Aucun micro n'a été trouvé sur cet appareil."); }
+    else if (e.error === "not-allowed" || e.error === "service-not-allowed") pauseForTap("Le navigateur a mis la dictée en pause. Touchez le bouton rouge pour reprendre.");
+    else if (e.error === "network") setRecUI("Connexion au service de dictée perdue, nouvelle tentative…");
+  };
+  rec.onend = () => {
+    commit(); full = ""; committed = 0;
+    if (!alive || !recording) return;
+    if (++restarts > 50) { pauseForTap("La dictée s'est arrêtée. Touchez le bouton rouge pour reprendre."); return; }
+    setTimeout(() => {
+      if (!alive || !recording) return;
+      try { rec.start(); } catch { pauseForTap("Le navigateur a mis la dictée en pause. Touchez le bouton rouge pour reprendre."); }
+    }, 300);
+  };
+  rec.start(); // dans le toucher : indispensable sur Safari
+  browserCommit = commit;
+  return () => { alive = false; browserCommit = null; clearTimeout(silence); clearTimeout(watchdog); commit(); try { rec.onend = null; rec.stop(); } catch {} };
 }
 
 const serverError = (status, body) => ({

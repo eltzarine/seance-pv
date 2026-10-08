@@ -29,20 +29,22 @@ MOCK_SR = r"""
     constructor(){ this.continuous=false; this.interimResults=false; this.lang=""; window.__srInstances=(window.__srInstances||0)+1; window.__lastSR=this; }
     start(){
       window.__srStarts=(window.__srStarts||0)+1;
-      const m = mode();
-      if (m==="denied") { setTimeout(()=>{ this.onerror&&this.onerror({error:"not-allowed"}); this.onend&&this.onend(); },50); return; }
-      if (m==="dictation-off") { setTimeout(()=>{ this.onerror&&this.onerror({error:"service-not-allowed"}); this.onend&&this.onend(); },50); return; }
-      setTimeout(()=>this.onaudiostart&&this.onaudiostart(),30);
-      if (window.__srStarts>1) return; // une seule phrase par scénario
+      const m = mode(), first = window.__srStarts===1;
+      const fail = err => setTimeout(()=>{ this.onerror&&this.onerror({error:err}); this.onend&&this.onend(); },50);
+      if (m==="denied") return fail("not-allowed");
+      if (m==="dictation-off") return fail("service-not-allowed");
+      if (m==="safari-deny-restart" && !first) return fail("service-not-allowed");
+      setTimeout(()=>{ this.onstart&&this.onstart(); this.onaudiostart&&this.onaudiostart(); },30);
+      if (!first) return;
       const words = "Je déclare la séance ouverte et je propose de passer au premier point".split(" ");
       let acc = "";
       words.forEach((w,i)=>setTimeout(()=>{
         acc += (i?" ":"")+w;
-        const fin = (m==="chrome" && i===words.length-1);
-        const res = [[{transcript:acc}]]; res[0].isFinal = fin;
+        const res = [[{transcript:acc}]]; res[0].isFinal = (m==="chrome" && i===words.length-1);
         this.onresult && this.onresult({resultIndex:0, results:res});
       }, 80*(i+1)));
-      // Safari : jamais de résultat « final », la reconnaissance s'arrête seule après un silence
+      // Safari : aucun résultat « final » ; la session s'arrête d'elle-même plus tard
+      if (m.startsWith("safari")) setTimeout(()=>this.onend&&this.onend(), 3500);
     }
     stop(){ setTimeout(()=>this.onend&&this.onend(),20); }
     abort(){ this.stop(); }
@@ -137,17 +139,47 @@ def main():
         def t_safari():
             page.locator("#recBtn").tap()
             expect(page.locator("#interim")).to_contain_text("premier point", timeout=3000)
-            expect(page.locator("#segs .seg")).to_have_count(1, timeout=5000)
-            expect(page.locator("#segs .seg").first).to_contain_text("Je déclare la séance ouverte")
-            assert page.evaluate("window.__lastSR.continuous") is False, "mode continu actif sur iPhone"
-            time.sleep(1.2)
-            assert page.evaluate("window.__srStarts") >= 2, "l'écoute n'a pas été relancée après le silence"
+            expect(page.locator("#segs .seg")).to_have_count(1, timeout=4000)
+            expect(page.locator("#segs .seg").first).to_contain_text("Je déclare la séance ouverte et je propose de passer au premier point")
+            assert page.evaluate("window.__srStarts") == 1, "l'écoute a été coupée pour valider la phrase"
+            time.sleep(2.5)
+            assert page.evaluate("window.__srStarts") >= 2, "l'écoute n'a pas repris après l'arrêt de Safari"
+            assert page.evaluate("window.__srInstances") == 1, "nouvel objet de dictée créé (refusé par Safari hors toucher)"
             expect(page.locator("#liveTag")).to_be_visible()
-        check("Safari : phrase validée après un silence, puis écoute relancée", t_safari)
+            expect(page.locator("#micBanner")).to_be_hidden()
+            expect(page.locator("#segs .seg")).to_have_count(1)
+        check("Safari : phrase validée après un silence sans couper l'écoute, reprise sur la même session", t_safari)
         def t_visible():
             assert page.locator("#livebox").is_visible() and page.locator("#livebox").bounding_box()["y"] < 844, "encart hors écran"
         check("iPhone : l'encart de transcription est visible à l'écran pendant l'enregistrement", t_visible)
         check("aucune erreur JavaScript (Safari simulé)", lambda: (_ for _ in ()).throw(AssertionError("; ".join(errors))) if errors else None)
+        ctx.close()
+
+        print("Étape 2 · changement d'orateur en pleine phrase (Safari)")
+        ctx, page, errors = new_page(browser, iphone, sr_mode="safari")
+        go_rec(page)
+        def t_switch():
+            page.locator("#recBtn").tap()
+            expect(page.locator("#interim")).to_contain_text("ouverte", timeout=3000)
+            page.locator("#speakers .chip", has_text="Karine HOUCHARD").tap()
+            expect(page.locator("#segs .seg")).to_have_count(2, timeout=4000)
+            segs = page.locator("#segs .seg p").all_inner_texts(); whos = page.locator("#segs .seg .who").all_inner_texts()
+            assert whos == ["Odile HANTZ", "Karine HOUCHARD"], whos
+            assert " ".join(segs) == "Je déclare la séance ouverte et je propose de passer au premier point", segs
+        check("orateur changé en cours de phrase : texte réparti sans doublon", t_switch)
+        ctx.close()
+
+        print("Étape 2 · Safari refuse la reprise")
+        ctx, page, errors = new_page(browser, iphone, sr_mode="safari-deny-restart")
+        go_rec(page)
+        def t_deny():
+            page.locator("#recBtn").tap()
+            expect(page.locator("#segs .seg")).to_have_count(1, timeout=4000)
+            expect(page.locator("#micBanner")).to_contain_text("Touchez le bouton rouge pour reprendre", timeout=5000)
+            expect(page.locator("#liveTag")).to_be_hidden()
+            page.locator("#recBtn").tap()
+            expect(page.locator("#liveTag")).to_be_visible()
+        check("reprise refusée : pause propre, un toucher relance", t_deny)
         ctx.close()
 
         print("Étape 2 · erreurs explicites")
@@ -155,9 +187,9 @@ def main():
         go_rec(page)
         def t_dict():
             page.locator("#recBtn").tap()
-            expect(page.locator("#micBanner")).to_contain_text("Activer Dictée", timeout=2000)
+            expect(page.locator("#micBanner")).to_contain_text("Siri", timeout=2000)
             expect(page.locator("#liveTag")).to_be_hidden()
-        check("iPhone, dictée désactivée : message avec le bon réglage", t_dict)
+        check("iPhone, dictée indisponible au démarrage : message Siri et Dictée", t_dict)
         ctx.close()
         ctx, page, errors = new_page(browser, sr_mode="denied")
         go_rec(page)
