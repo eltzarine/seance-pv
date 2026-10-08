@@ -653,10 +653,14 @@ function startBrowser() {
   return () => { alive = false; browserCommit = null; clearTimeout(silence); clearTimeout(watchdog); commit(); try { rec.onend = null; rec.stop(); } catch {} };
 }
 
-const serverError = (status, body) => ({
-  403: "Ce site n'est pas autorisé par le serveur de transcription.",
-  502: `Le service de transcription a refusé la session${body?.status ? " (erreur " + body.status + ")" : ""}.`
-}[status] || `Le serveur de transcription a répondu une erreur (${status}).`);
+const serverError = (status, body) => {
+  const e = body && body.error;
+  if (e === "origine_refusee") return `Le serveur de transcription refuse ce site${body.origine ? " (" + body.origine + ")" : ""}. Vérifiez la variable ALLOWED_ORIGINS sur Cloudflare.`;
+  if (e === "cle_gladia_absente") return "La clé Gladia n'est pas configurée sur le serveur (variable GLADIA_API_KEY).";
+  if (e === "gladia") return body.status === 401 || body.status === 403 ? "Gladia refuse la clé API : vérifiez GLADIA_API_KEY." : `Gladia a refusé la session (erreur ${body.status}).`;
+  if (e === "erreur_serveur") return "Erreur du serveur de transcription : " + (body.detail || "inconnue") + ".";
+  return `Le serveur de transcription a répondu une erreur (${status}).`;
+};
 
 /* Gladia : micro → PCM 16 bits 16 kHz mono → WebSocket, par paquets de 100 ms. */
 async function startGladia(ctx) {
@@ -673,8 +677,16 @@ async function startGladia(ctx) {
     const body = await r.json().catch(() => ({}));
     if (!r.ok) throw known(serverError(r.status, body));
     if (!body.url) throw known("Réponse du serveur de transcription incomplète.");
-    sess = body;
-  } catch (e) { stopTracks(); throw e.known ? e : known("Serveur de transcription injoignable. Vérifiez la connexion internet."); }
+    sess = body; diag("session ouverte");
+  } catch (e) {
+    stopTracks();
+    if (e.known) { diag("session : " + e.message); throw e; }
+    diag("session : échec réseau " + (e && e.message));
+    let detail = "";
+    try { const h = await fetch(serverBase() + "/health"); detail = h.ok ? " (serveur joignable, demande bloquée)" : ` (serveur : ${h.status})`; diag("health : " + h.status + " " + JSON.stringify(await h.json().catch(() => ({})))); }
+    catch (e2) { diag("health : échec " + (e2 && e2.message)); }
+    throw known("Serveur de transcription injoignable" + detail + ". Vérifiez la connexion internet.");
+  }
 
   await ctx.resume().catch(() => {});
   const worklet = "class C extends AudioWorkletProcessor{process(i){const c=i[0]&&i[0][0];if(c)this.port.postMessage(c.slice(0));return true}}registerProcessor('cap',C)";
@@ -709,7 +721,7 @@ async function startGladia(ctx) {
   const open = () => {
     ws = new WebSocket(sess.url);
     ws.binaryType = "arraybuffer";
-    ws.onopen = () => { tries = 0; while (pending.length) ws.send(pending.shift()); if (recording) setRecUI(); };
+    ws.onopen = () => { diag("websocket ouvert"); tries = 0; while (pending.length) ws.send(pending.shift()); if (recording) setRecUI(); };
     ws.onmessage = ev => {
       let m; try { m = JSON.parse(ev.data); } catch { return; }
       if (m.type !== "transcript" || !m.data) return;
@@ -719,6 +731,7 @@ async function startGladia(ctx) {
       else setInterim(text);
     };
     ws.onclose = ev => {
+      diag("websocket fermé " + ev.code + " " + (ev.reason || ""));
       if (closing || ev.code === 1000) return;
       if (recording && tries < 5) {
         tries++; setRecUI("Connexion perdue, reconnexion…");
