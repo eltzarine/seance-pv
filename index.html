@@ -6,15 +6,31 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob:; connect-src https://seance-pv.cesar-poirrier.workers.dev wss://api.gladia.io; worker-src blob:; base-uri 'none'; form-action 'none'; object-src 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="robots" content="noindex">
+<meta name="theme-color" content="#1f3f8f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Séance PV">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="icon" type="image/svg+xml" href="icons/logo.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
 <title>Séance PV</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,400;7..72,600&family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap">
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
+<div id="splash" aria-hidden="true">
+  <div class="splash-in"><svg class="splash-logo" viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="112" fill="#1f3f8f"/><path d="M152 112h208a48 48 0 0 1 48 48v148a48 48 0 0 1-48 48H226l-74 58v-58h0a48 48 0 0 1-48-48V160a48 48 0 0 1 48-48z" fill="#fff"/><rect x="160" y="172" width="192" height="26" rx="13" fill="#1f3f8f"/><rect x="160" y="226" width="118" height="26" rx="13" fill="#1f3f8f"/><path d="M296 262l26 26 50-56" fill="none" stroke="#c2331f" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <div class="splash-name">Séance PV</div>
+    <div class="splash-tag">Le procès-verbal du conseil municipal</div>
+  </div>
+  <div class="splash-copy">© XVI 2026</div>
+</div>
 <div class="wrap">
   <header class="top">
-    <div class="brand">Séance PV<small>Conseil municipal de Gaillon · Eure</small></div>
+    <div class="brand-row"><svg class="brand-logo" viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="112" fill="#1f3f8f"/><path d="M152 112h208a48 48 0 0 1 48 48v148a48 48 0 0 1-48 48H226l-74 58v-58h0a48 48 0 0 1-48-48V160a48 48 0 0 1 48-48z" fill="#fff"/><rect x="160" y="172" width="192" height="26" rx="13" fill="#1f3f8f"/><rect x="160" y="226" width="118" height="26" rx="13" fill="#1f3f8f"/><path d="M296 262l26 26 50-56" fill="none" stroke="#c2331f" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/></svg><div class="brand">Séance PV<small>Conseil municipal de Gaillon · Eure</small></div></div>
     <div class="row">
       <button class="btn ghost" id="btnExport" type="button">Exporter</button>
       <button class="btn ghost" id="btnImport" type="button">Importer</button>
@@ -147,6 +163,7 @@
     <div id="viewPrev" class="desk" hidden></div>
   </section>
 </div>
+<footer class="foot">Séance PV · © XVI 2026</footer>
 <div class="toast" id="toast" hidden></div>
 <script src="app.js" defer></script>
 </body>

@@ -104,6 +104,16 @@ def main():
             t = page.locator("#odj0"); expect(t).to_be_visible()
             assert page.evaluate("(()=>{const t=document.querySelector('#odj2');return t.scrollHeight<=t.clientHeight+2})()"), "le texte défile dans le champ"
         check("ordre du jour : champs multi-lignes sans défilement interne", t_odj)
+        def t_splash():
+            expect(page.locator("#splash")).to_contain_text("© XVI 2026")
+            expect(page.locator("#splash")).to_have_count(0, timeout=4000)
+            expect(page.locator(".foot")).to_contain_text("© XVI 2026")
+            for path in ["manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png", "icons/maskable-512.png", "icons/apple-touch-icon.png", "icons/favicon-32.png", "icons/logo.svg"]:
+                r = page.request.get(f"http://localhost:{PORT}/{path}")
+                assert r.ok, path
+            m = page.request.get(f"http://localhost:{PORT}/manifest.webmanifest").json()
+            assert m["name"] == "Séance PV" and m["display"] == "standalone"
+        check("écran d'accueil « © XVI 2026 » puis disparition ; icônes et manifeste présents", t_splash)
         check("aucune erreur JavaScript au chargement", lambda: (_ for _ in ()).throw(AssertionError("; ".join(errors))) if errors else None)
         ctx.close()
 

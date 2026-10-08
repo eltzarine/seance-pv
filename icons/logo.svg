@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Séance PV">
+  <rect width="512" height="512" rx="112" fill="#1f3f8f"/>
+  <path d="M152 112h208a48 48 0 0 1 48 48v148a48 48 0 0 1-48 48H226l-74 58v-58h0a48 48 0 0 1-48-48V160a48 48 0 0 1 48-48z" fill="#fff"/>
+  <rect x="160" y="172" width="192" height="26" rx="13" fill="#1f3f8f"/>
+  <rect x="160" y="226" width="118" height="26" rx="13" fill="#1f3f8f"/>
+  <path d="M296 262l26 26 50-56" fill="none" stroke="#c2331f" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

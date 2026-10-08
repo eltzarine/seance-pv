@@ -902,6 +902,7 @@ $("#copyBtn").onclick = () => {
   try { navigator.clipboard.writeText(t).then(() => toast("Texte du PV copié."), fb); } catch { fb(); }
 };
 
+(() => { const sp = $("#splash"); if (!sp) return; const rm = () => sp.remove(); sp.addEventListener("animationend", e => { if (e.animationName === "splashOut") rm(); }); setTimeout(rm, 3000); })();
 function renderAll() { renderSeance(); renderRec(); renderPV(); }
 renderAll(); setView("edit"); go(S.step || 0);
 })();
