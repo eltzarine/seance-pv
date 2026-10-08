@@ -6,6 +6,16 @@
 //                              ex. https://eltzarine.github.io
 
 const GLADIA_LIVE = "https://api.gladia.io/v2/live";
+// Limite d'ouvertures de session par adresse IP (mémoire de l'instance : un garde-fou, pas un quota exact).
+const RATE_MAX = 12, RATE_WINDOW_MS = 10 * 60 * 1000;
+const hits = new Map();
+function tooMany(ip) {
+  const now = Date.now(), list = (hits.get(ip) || []).filter(t => now - t < RATE_WINDOW_MS);
+  if (list.length >= RATE_MAX) { hits.set(ip, list); return true; }
+  list.push(now); hits.set(ip, list);
+  if (hits.size > 5000) hits.clear();
+  return false;
+}
 
 // "https://eltzarine.github.io/seance-pv/" et "eltzarine.github.io" deviennent "https://eltzarine.github.io"
 const normOrigin = s => {
@@ -28,6 +38,8 @@ export default {
       "Access-Control-Allow-Headers": "Content-Type",
       "Access-Control-Max-Age": "86400",
       "Vary": "Origin",
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
     };
     const json = (body, status = 200) =>
       new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
@@ -45,6 +57,7 @@ export default {
 
       if (request.method === "POST" && pathname === "/session") {
         if (!env.GLADIA_API_KEY) return json({ error: "cle_gladia_absente" }, 500);
+        if (tooMany(request.headers.get("CF-Connecting-IP") || "inconnue")) return json({ error: "trop_de_demandes" }, 429);
         const r = await fetch(GLADIA_LIVE, {
           method: "POST",
           headers: { "Content-Type": "application/json", "x-gladia-key": String(env.GLADIA_API_KEY).trim() },

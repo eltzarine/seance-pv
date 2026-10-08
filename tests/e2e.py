@@ -61,8 +61,8 @@ def serve():
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     return httpd
 
-def new_page(browser, device=None, sr_mode=None, server=None, setup=None):
-    ctx = browser.new_context(**(device or {}), permissions=["microphone"], accept_downloads=True)
+def new_page(browser, device=None, sr_mode=None, server=None, setup=None, bypass_csp=False):
+    ctx = browser.new_context(**(device or {}), permissions=["microphone"], accept_downloads=True, bypass_csp=bypass_csp)
     page = ctx.new_page()
     # Polices Google inaccessibles depuis l'environnement de test : remplacées par une feuille vide
     page.route("https://fonts.googleapis.com/**", lambda r: r.fulfill(status=200, content_type="text/css", body=""))
@@ -105,6 +105,43 @@ def main():
             assert page.evaluate("(()=>{const t=document.querySelector('#odj2');return t.scrollHeight<=t.clientHeight+2})()"), "le texte défile dans le champ"
         check("ordre du jour : champs multi-lignes sans défilement interne", t_odj)
         check("aucune erreur JavaScript au chargement", lambda: (_ for _ in ()).throw(AssertionError("; ".join(errors))) if errors else None)
+        ctx.close()
+
+        print("Étape 2 · grille des orateurs et ergonomie iPhone")
+        ctx, page, errors = new_page(browser, iphone)
+        go_rec(page)
+        def t_grid():
+            chips = page.locator("#speakers .chip")
+            expect(chips).to_have_count(29)
+            vw = page.viewport_size["width"]
+            for i in range(29):
+                b = chips.nth(i).bounding_box()
+                assert b["x"] >= 0 and b["x"] + b["width"] <= vw, f"élu {i} hors écran"
+            assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth"), "défilement horizontal"
+            chips.filter(has_text="DELUCA").tap()
+            expect(page.locator("#nowSpeaking")).to_have_text("Isabelle DELUCA")
+            expect(chips.filter(has_text="DELUCA")).to_have_attribute("aria-pressed", "true")
+        check("les 29 élus visibles d'un coup en grille, sélection en un toucher", t_grid)
+        def t_tap():
+            assert page.evaluate("getComputedStyle(document.querySelector('#speakers .chip')).touchAction") == "manipulation"
+            assert page.evaluate("getComputedStyle(document.querySelector('#recBtn')).touchAction") == "manipulation"
+            assert page.evaluate("parseFloat(getComputedStyle(document.querySelector('#manual')).fontSize)") >= 16, "zoom au focus"
+        check("pas de zoom au double-tap ni au focus d'un champ", t_tap)
+        def t_import():
+            payload = json.dumps({"seance": {"commune": "X", "elus": [{"nom": "<img src=x onerror=window.__xss=1>", "statut": "present"}, {"nom": 42}], "odj": ["Point"]},
+                                  "pv": [{"titre": "<script>window.__xss=2</script>", "texte": "t", "status": "hack"}], "segments": [{"text": "a", "pt": 999}], "step": 9})
+            page.locator("#btnImport").tap(); page.locator("#ioText").fill(payload); page.locator("#ioGo").tap()
+            expect(page.locator("#toast")).to_contain_text("importée")
+            page.locator('.step[data-step="0"]').click()
+            expect(page.locator("#elus .elu")).to_have_count(1)
+            expect(page.locator("#elus .nom").first).to_contain_text("<img src=x")
+            page.locator('.step[data-step="2"]').click()
+            assert page.evaluate("window.__xss") is None, "code injecté exécuté"
+            expect(page.locator(".pill.todo")).to_have_count(1)
+            page.locator("#btnImport").tap(); page.locator("#ioText").fill('{"pas":"une séance"}'); page.locator("#ioGo").tap()
+            expect(page.locator("#ioNote")).to_contain_text("n'est pas une séance")
+        check("import : contenu hostile affiché comme du texte, valeurs invalides corrigées, format refusé", t_import)
+        check("aucune erreur JavaScript ni violation de sécurité (CSP)", lambda: (_ for _ in ()).throw(AssertionError("; ".join(errors))) if errors else None)
         ctx.close()
 
         print("Étape 2 · dictée du navigateur, comportement Chrome (bureau)")
@@ -214,9 +251,9 @@ def main():
             ws.on_message(on_msg)
         def setup_gladia(page):
             page.route("https://worker.test/session", lambda r: r.fulfill(status=200, content_type="application/json",
-                headers={"Access-Control-Allow-Origin": "*"}, body=json.dumps({"id": "s1", "url": "wss://gladia.test/v2/live?token=s1"})))
-            page.route_web_socket("wss://gladia.test/**", on_ws)
-        ctx, page, errors = new_page(browser, iphone, server="https://worker.test", setup=setup_gladia)
+                headers={"Access-Control-Allow-Origin": "*"}, body=json.dumps({"id": "s1", "url": "wss://api.gladia.io/v2/live?token=s1"})))
+            page.route_web_socket("wss://api.gladia.io/**", on_ws)
+        ctx, page, errors = new_page(browser, iphone, server="https://worker.test", setup=setup_gladia, bypass_csp=True)
         go_rec(page)
         def t_gladia():
             page.locator("#recBtn").tap()

@@ -47,8 +47,12 @@ Rien ne se règle dans l'appli : l'adresse du serveur est inscrite une fois pour
 ## Sécurité
 
 - La clé Gladia ne quitte jamais le serveur. Le navigateur reçoit seulement un jeton temporaire, valable pour une session.
-- Le serveur n'accepte que les demandes venant de votre site (`ALLOWED_ORIGINS`). Par précaution, fixez aussi une limite de dépense dans votre compte Gladia.
+- Le serveur n'accepte que les demandes venant de votre site (`ALLOWED_ORIGINS`) et limite chaque adresse IP à 12 ouvertures de session par tranche de 10 minutes. Par précaution, fixez aussi une limite de dépense dans votre compte Gladia.
+- Les séances importées sont contrôlées champ par champ : un contenu piégé s'affiche comme du simple texte.
 
 ## Tests
 
-`python3 tests/e2e.py` lance les tests de bout en bout (Playwright, Chromium) : appel des élus, dictée en mode Chrome et en mode Safari iPhone simulés, erreurs de micro, transcription Gladia simulée, procès-verbal, aperçu et PDF.
+- `python3 tests/e2e.py` : tests de bout en bout (Playwright, Chromium, iPhone émulé) : appel des élus, grille des orateurs, dictée Chrome et Safari simulées, erreurs de micro, transcription Gladia simulée, import hostile, politique de sécurité, procès-verbal, aperçu et PDF.
+- `node tests/worker.test.mjs` : tests du serveur (origines, erreurs, limitation de débit).
+
+L'appli hébergée se compose de `index.html`, `app.css` et `app.js`, avec une politique de sécurité de contenu stricte : scripts du site uniquement, connexions limitées au serveur de transcription et à Gladia.
